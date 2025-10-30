@@ -417,6 +417,8 @@ void SimulationEngine::updateV2VCommunication() {
     if (m_simulationTime - m_lastCAMTime >= camInterval) {
         m_lastCAMTime = m_simulationTime;
         
+        int totalSent = 0;
+        
         // Chaque véhicule envoie un CAM à ses voisins
         for (const auto& vehicle : m_vehicles) {
             if (!vehicle->isActive()) continue;
@@ -431,7 +433,23 @@ void SimulationEngine::updateV2VCommunication() {
             );
             
             // Broadcast aux voisins (direct uniquement, maxHops=0)
-            m_v2vManager->broadcastMessage(cam, 0);
+            int sent = m_v2vManager->broadcastMessage(cam, 0);
+            totalSent += sent;
+        }
+        
+        // Log V2V stats toutes les 5 secondes
+        static double lastStatsLog = 0.0;
+        if (m_simulationTime - lastStatsLog >= 5.0) {
+            lastStatsLog = m_simulationTime;
+            const auto& stats = m_v2vManager->getStatistics();
+            LOG_INFO(QString("V2V Stats: %1 msgs sent, %2 received, %3 dropped | "
+                           "Latency avg: %4ms | Connections: %5 | Neighbors avg: %6")
+                     .arg(stats.totalMessagesSent)
+                     .arg(stats.totalMessagesReceived)
+                     .arg(stats.totalMessagesDropped)
+                     .arg(stats.avgLatencyMs, 0, 'f', 2)
+                     .arg(stats.activeConnections)
+                     .arg(stats.avgNeighbors, 0, 'f', 1));
         }
     }
     
