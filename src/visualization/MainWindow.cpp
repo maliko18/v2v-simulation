@@ -144,8 +144,9 @@ void MainWindow::createUI() {
     
     m_vehicleCountSpinBox = new QSpinBox(leftPanel);
     m_vehicleCountSpinBox->setMinimum(10);
-    m_vehicleCountSpinBox->setMaximum(500);  // Réduit de 5000 à 500 pour meilleures performances
-    m_vehicleCountSpinBox->setValue(50);  // Réduit de 2000 à 50 pour démarrage rapide
+    m_vehicleCountSpinBox->setMaximum(5000);  // Maximum 5000 véhicules (optimisé pour 2000)
+    m_vehicleCountSpinBox->setValue(500);  // Valeur par défaut 500
+    m_vehicleCountSpinBox->setSingleStep(50);  // Incrémenter par 50
     m_vehicleCountSpinBox->setStyleSheet("QSpinBox { background-color: #3b3b3b; color: white; padding: 8px; border: 1px solid #555; border-radius: 5px; font-size: 14px; }"
                                         "QSpinBox::up-button, QSpinBox::down-button { background-color: #4CAF50; }");
     leftLayout->addWidget(m_vehicleCountSpinBox);

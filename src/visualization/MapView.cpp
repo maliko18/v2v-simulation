@@ -25,9 +25,9 @@ namespace visualization {
 MapView::MapView(QWidget* parent)
     : QWidget(parent)
     , m_engine(nullptr)
-    , m_centerLat(47.7508)  // Mulhouse
-    , m_centerLon(7.3359)
-    , m_zoomLevel(13)
+    , m_centerLat(48.08)  // Centre de l'Alsace (Colmar)
+    , m_centerLon(7.36)
+    , m_zoomLevel(10)  // Zoom réduit pour voir toute l'Alsace
     , m_offset(0, 0)
     , m_scale(1.0)
     , m_isDragging(false)
@@ -60,10 +60,10 @@ MapView::MapView(QWidget* parent)
                 }
             });
     
-    // Précharger les tuiles autour de Mulhouse au démarrage
-    m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 2);
+    // Précharger les tuiles autour du centre de l'Alsace au démarrage
+    m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 3);
     
-    LOG_INFO("MapView created with OSM tile support");
+    LOG_INFO("MapView created with OSM tile support (Alsace region)");
 }
 
 MapView::~MapView() {
@@ -141,67 +141,49 @@ void MapView::paintEvent(QPaintEvent* event) {
     if (m_showVehicles && m_engine) {
         const auto& vehicles = m_engine->getVehicles();
         
-        // Compteur pour limiter le nombre de véhicules dessinés (optimisation)
-        int drawnVehicles = 0;
-        const int maxDrawnVehicles = 500;  // Ne dessiner que les 500 premiers véhicules visibles
+        // Pré-calculer la zone visible pour le culling
+        const double margin = 150.0;  // Marge en pixels
+        const double minX = -margin;
+        const double maxX = width() + margin;
+        const double minY = -margin;
+        const double maxY = height() + margin;
         
-        // Dessiner les zones de transmission en premier (si connexions activées)
-        if (m_showConnections) {
-            painter.setPen(Qt::NoPen);
-            for (const auto& vehicle : vehicles) {
-                if (!vehicle->isActive()) continue;
-                
-                QPointF screenPos = latLonToScreen(vehicle->getLatitude(), vehicle->getLongitude());
-                
-                // Vérifier si visible
-                if (screenPos.x() < -100 || screenPos.x() > width() + 100 ||
-                    screenPos.y() < -100 || screenPos.y() > height() + 100) {
-                    continue;
-                }
-                
-                // Rayon de transmission (converti en pixels)
-                double radiusMeters = vehicle->getTransmissionRadius();
-                double radiusPixels = radiusMeters * std::pow(2.0, m_zoomLevel) / 156543.03392 / std::cos(vehicle->getLatitude() * M_PI / 180.0);
-                
-                // Zone semi-transparente
-                painter.setBrush(QColor(100, 200, 255, 30));
-                painter.drawEllipse(screenPos, radiusPixels, radiusPixels);
-            }
-        }
+        // Première passe : identifier les véhicules visibles uniquement
+        std::vector<std::pair<core::Vehicle*, QPointF>> visibleVehicles;
         
-        // Dessiner les véhicules par-dessus
-        painter.setPen(QPen(QColor(0, 0, 0), 2));
-        painter.setBrush(QColor(255, 50, 50));
+        // AUGMENTÉ : Afficher TOUS les véhicules si pas de lag
+        size_t maxVisible = 2000;  // Afficher jusqu'à 2000 véhicules
+        
+        visibleVehicles.reserve(maxVisible);
         
         for (const auto& vehicle : vehicles) {
             if (!vehicle->isActive()) continue;
-            if (drawnVehicles >= maxDrawnVehicles) break;  // Limite atteinte
             
             QPointF screenPos = latLonToScreen(vehicle->getLatitude(), vehicle->getLongitude());
             
-            // Vérifier si le véhicule est visible à l'écran (frustum culling)
-            if (screenPos.x() < -50 || screenPos.x() > width() + 50 ||
-                screenPos.y() < -50 || screenPos.y() > height() + 50) {
+            // Culling: ignorer si hors écran
+            if (screenPos.x() < minX || screenPos.x() > maxX ||
+                screenPos.y() < minY || screenPos.y() > maxY) {
                 continue;
             }
             
-            drawnVehicles++;
+            visibleVehicles.emplace_back(vehicle.get(), screenPos);
             
-            // Dessiner le véhicule comme un cercle avec direction
-            painter.save();
-            painter.translate(screenPos);
-            painter.rotate(vehicle->getDirection() * 180.0 / M_PI);
-            
-            // Corps du véhicule (rectangle arrondi)
-            painter.drawEllipse(QPointF(0, 0), 5, 5);
-            
-            // Indicateur de direction (petit triangle)
-            painter.setBrush(QColor(255, 255, 0));
-            QPolygonF arrow;
-            arrow << QPointF(0, -8) << QPointF(-3, -3) << QPointF(3, -3);
-            painter.drawPolygon(arrow);
-            
-            painter.restore();
+            // Limite stricte pour performances (adaptative)
+            if (visibleVehicles.size() >= maxVisible) break;
+        }
+        
+        // Dessiner les zones de transmission en premier (si connexions activées)
+        // DÉSACTIVÉ avec beaucoup de véhicules pour performances
+        // if (m_showConnections && visibleVehicles.size() < 100) { ... }
+        
+        // Dessiner les véhicules ULTRA-SIMPLIFIÉ pour supporter 2000 véhicules
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(255, 50, 50));
+        
+        for (const auto& [vehicle, screenPos] : visibleVehicles) {
+            // Simple cercle sans rotation ni flèche
+            painter.drawEllipse(screenPos, 4, 4);
         }
     }
     
@@ -211,10 +193,41 @@ void MapView::paintEvent(QPaintEvent* event) {
         if (roadGraph && roadGraph->getNodeCount() > 0) {
             const auto& graph = roadGraph->getGraph();
             
-            // Dessiner les arêtes (routes) - couleur bleu foncé bien visible
-            painter.setPen(QPen(QColor(0, 0, 255, 200), 3));
+            // Calculer la bounding box visible pour le culling
+            const double margin = 100.0;
+            const double minX = -margin;
+            const double maxX = width() + margin;
+            const double minY = -margin;
+            const double maxY = height() + margin;
+            
+            // Style adaptatif selon le zoom
+            QColor roadColor;
+            int roadWidth;
+            int maxEdgesToDraw;
+            
+            if (m_zoomLevel < 12) {
+                // Zoom faible : routes principales seulement, fines
+                roadColor = QColor(0, 0, 255, 150);
+                roadWidth = 2;
+                maxEdgesToDraw = 1000;
+            } else if (m_zoomLevel < 14) {
+                // Zoom moyen : plus de routes, moyennes
+                roadColor = QColor(0, 0, 255, 180);
+                roadWidth = 2;
+                maxEdgesToDraw = 3000;
+            } else {
+                // Zoom élevé : toutes les routes, épaisses
+                roadColor = QColor(0, 0, 255, 220);
+                roadWidth = 3;
+                maxEdgesToDraw = 10000;  // Pas de limite pratique
+            }
+            
+            // Dessiner les arêtes (routes)
+            painter.setPen(QPen(roadColor, roadWidth));
+            
+            int drawnEdges = 0;
             auto [ei, ei_end] = boost::edges(graph);
-            for (auto it = ei; it != ei_end; ++it) {
+            for (auto it = ei; it != ei_end && drawnEdges < maxEdgesToDraw; ++it) {
                 auto source = boost::source(*it, graph);
                 auto target = boost::target(*it, graph);
                 
@@ -224,24 +237,44 @@ void MapView::paintEvent(QPaintEvent* event) {
                 QPointF p1 = latLonToScreen(nodeSource.latitude, nodeSource.longitude);
                 QPointF p2 = latLonToScreen(nodeTarget.latitude, nodeTarget.longitude);
                 
-                // Ne dessiner que les arêtes visibles
-                if ((p1.x() >= -50 && p1.x() <= width() + 50 && p1.y() >= -50 && p1.y() <= height() + 50) ||
-                    (p2.x() >= -50 && p2.x() <= width() + 50 && p2.y() >= -50 && p2.y() <= height() + 50)) {
+                // Culling: ne dessiner que si au moins un point est visible
+                bool p1Visible = (p1.x() >= minX && p1.x() <= maxX && p1.y() >= minY && p1.y() <= maxY);
+                bool p2Visible = (p2.x() >= minX && p2.x() <= maxX && p2.y() >= minY && p2.y() <= maxY);
+                
+                if (p1Visible || p2Visible) {
                     painter.drawLine(p1, p2);
+                    drawnEdges++;
                 }
             }
             
-            // Dessiner les nœuds (intersections) - jaune bien visible
-            painter.setPen(QPen(QColor(0, 0, 0), 2));
-            painter.setBrush(QColor(255, 255, 0, 255));
-            auto [vi, vi_end] = boost::vertices(graph);
-            for (auto it = vi; it != vi_end; ++it) {
-                const auto& node = graph[*it];
-                QPointF p = latLonToScreen(node.latitude, node.longitude);
+            // Dessiner les nœuds (intersections) - adaptatif selon zoom
+            if (m_zoomLevel >= 13) {  // Réduit de 14 à 13 pour afficher plus tôt
+                painter.setPen(QPen(QColor(0, 0, 0), 1));
+                painter.setBrush(QColor(255, 200, 0, 255));  // Jaune-orange
                 
-                // Ne dessiner que les nœuds visibles
-                if (p.x() >= -10 && p.x() <= width() + 10 && p.y() >= -10 && p.y() <= height() + 10) {
-                    painter.drawEllipse(p, 4, 4);
+                int drawnNodes = 0;
+                int maxNodes = 500;
+                int nodeSize = 3;
+                
+                // Adapter selon le zoom
+                if (m_zoomLevel >= 15) {
+                    maxNodes = 2000;
+                    nodeSize = 4;
+                } else if (m_zoomLevel >= 14) {
+                    maxNodes = 1000;
+                    nodeSize = 3;
+                }
+                
+                auto [vi, vi_end] = boost::vertices(graph);
+                for (auto it = vi; it != vi_end && drawnNodes < maxNodes; ++it) {
+                    const auto& node = graph[*it];
+                    QPointF p = latLonToScreen(node.latitude, node.longitude);
+                    
+                    // Culling: ne dessiner que les nœuds visibles
+                    if (p.x() >= minX && p.x() <= maxX && p.y() >= minY && p.y() <= maxY) {
+                        painter.drawEllipse(p, nodeSize, nodeSize);
+                        drawnNodes++;
+                    }
                 }
             }
         }

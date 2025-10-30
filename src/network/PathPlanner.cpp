@@ -42,20 +42,33 @@ private:
 };
 
 // Visiteur pour détecter la fin de A*
-struct FoundGoal {};
+struct FoundGoal {
+    bool timedOut;
+    FoundGoal(bool timeout = false) : timedOut(timeout) {}
+};
 
 class AStarGoalVisitor : public boost::default_astar_visitor {
 public:
-    AStarGoalVisitor(VertexDescriptor goal) : m_goal(goal) {}
+    AStarGoalVisitor(VertexDescriptor goal, int maxIterations = 5000) 
+        : m_goal(goal), m_maxIterations(maxIterations), m_iterations(0) {}
     
     void examine_vertex(VertexDescriptor v, const RoadGraphType&) {
+        // Vérifier d'abord si on a atteint le but
         if (v == m_goal) {
-            throw FoundGoal();
+            throw FoundGoal(false);  // Succès !
+        }
+        
+        // Limiter le nombre d'itérations pour éviter les freezes
+        m_iterations++;
+        if (m_iterations > m_maxIterations) {
+            throw FoundGoal(true);  // Timeout - abandonner
         }
     }
     
 private:
     VertexDescriptor m_goal;
+    int m_maxIterations;
+    mutable int m_iterations;
 };
 
 PathPlanner::PathPlanner(RoadGraph* roadGraph)
@@ -71,17 +84,19 @@ std::vector<QPointF> PathPlanner::findPath(const QPointF& start, const QPointF& 
     
     const auto& graph = m_roadGraph->getGraph();
     
-    utils::Logger::instance().info(QString("[PathPlanner] Finding path from (%1, %2) to (%3, %4)")
-                                   .arg(start.y(), 0, 'f', 6).arg(start.x(), 0, 'f', 6)
-                                   .arg(end.y(), 0, 'f', 6).arg(end.x(), 0, 'f', 6));
+    // Log désactivé pour performances (génère trop de logs avec beaucoup de véhicules)
+    // utils::Logger::instance().info(QString("[PathPlanner] Finding path from (%1, %2) to (%3, %4)")
+    //                                .arg(start.y(), 0, 'f', 6).arg(start.x(), 0, 'f', 6)
+    //                                .arg(end.y(), 0, 'f', 6).arg(end.x(), 0, 'f', 6));
     
     // Trouver les nœuds les plus proches du départ et de l'arrivée
     // Note: QPointF a x=longitude, y=latitude, mais getNearestNode attend (lat, lon)
     auto startVertex = m_roadGraph->getNearestNode(start.y(), start.x());
     auto endVertex = m_roadGraph->getNearestNode(end.y(), end.x());
     
-    utils::Logger::instance().info(QString("[PathPlanner] Start vertex: %1, End vertex: %2")
-                                   .arg(startVertex).arg(endVertex));
+    // Log désactivé pour performances
+    // utils::Logger::instance().info(QString("[PathPlanner] Start vertex: %1, End vertex: %2")
+    //                                .arg(startVertex).arg(endVertex));
     
     if (startVertex == endVertex) {
         utils::Logger::instance().warning("[PathPlanner] Start and end vertices are the same");
@@ -92,10 +107,14 @@ std::vector<QPointF> PathPlanner::findPath(const QPointF& start, const QPointF& 
     std::vector<VertexDescriptor> predecessors(boost::num_vertices(graph));
     std::vector<double> distances(boost::num_vertices(graph), std::numeric_limits<double>::max());
     
+    // Timeout adaptatif : limiter les itérations pour éviter les freezes
+    // Pour Mulhouse (~2300 nœuds) : 10000 itérations = suffisant pour la plupart des chemins
+    int maxIterations = std::min(10000, static_cast<int>(boost::num_vertices(graph) * 5));
+    
     try {
-        // Exécution de A*
+        // Exécution de A* avec timeout
         AStarHeuristic heuristic(graph, endVertex);
-        AStarGoalVisitor visitor(endVertex);
+        AStarGoalVisitor visitor(endVertex, maxIterations);
         
         boost::astar_search(
             graph,
@@ -107,7 +126,13 @@ std::vector<QPointF> PathPlanner::findPath(const QPointF& start, const QPointF& 
                 .weight_map(boost::get(&RoadEdge::length, graph))
         );
         
-    } catch (FoundGoal) {
+    } catch (const FoundGoal& fg) {
+        // Vérifier si on a atteint le but ou si c'est un timeout
+        if (fg.timedOut) {
+            utils::Logger::instance().warning("[PathPlanner] A* timeout - chemin abandonné");
+            return {};  // Retourner un chemin vide en cas de timeout
+        }
+        
         // Chemin trouvé ! Reconstruire le chemin
         std::vector<VertexDescriptor> path;
         VertexDescriptor current = endVertex;
@@ -153,16 +178,18 @@ std::vector<QPointF> PathPlanner::generateRandomPath(const QPointF& start, doubl
         return {start};
     }
     
-    utils::Logger::instance().info(QString("[PathPlanner] Generating random path from (%1, %2), minLength=%3m")
-                                   .arg(start.y(), 0, 'f', 6)
-                                   .arg(start.x(), 0, 'f', 6)
-                                   .arg(minLength));
+    // Log désactivé pour performances (génère trop de logs avec beaucoup de véhicules)
+    // utils::Logger::instance().info(QString("[PathPlanner] Generating random path from (%1, %2), minLength=%3m")
+    //                                .arg(start.y(), 0, 'f', 6)
+    //                                .arg(start.x(), 0, 'f', 6)
+    //                                .arg(minLength));
     
     // Trouver le nœud de départ le plus proche
     // Note: QPointF a x=longitude, y=latitude, mais getNearestNode attend (lat, lon)
     auto startVertex = m_roadGraph->getNearestNode(start.y(), start.x());
     
-    utils::Logger::instance().info(QString("[PathPlanner] Start vertex: %1").arg(startVertex));
+    // Log désactivé pour performances
+    // utils::Logger::instance().info(QString("[PathPlanner] Start vertex: %1").arg(startVertex));
     
     // Générateur aléatoire
     static std::random_device rd;
@@ -173,29 +200,37 @@ std::vector<QPointF> PathPlanner::generateRandomPath(const QPointF& start, doubl
     VertexDescriptor endVertex;
     
     int attempts = 0;
-    const int maxAttempts = 100;
+    const int maxAttempts = 100;  // Augmenté de 50 à 100 pour plus de chances
+    double bestDist = 0.0;
+    VertexDescriptor bestVertex = boost::vertex(dis(gen), graph);
     
-    do {
-        endVertex = boost::vertex(dis(gen), graph);
-        double dist = heuristic(startVertex, endVertex);
+    // Chercher un nœud distant, garder le meilleur trouvé
+    while (attempts < maxAttempts) {
+        VertexDescriptor candidate = boost::vertex(dis(gen), graph);
+        double dist = heuristic(startVertex, candidate);
         
+        // Si distance parfaite trouvée, utiliser immédiatement
         if (dist >= minLength) {
+            endVertex = candidate;
             break;
         }
         
+        // Sinon, garder le plus lointain trouvé
+        if (dist > bestDist) {
+            bestDist = dist;
+            bestVertex = candidate;
+        }
+        
         attempts++;
-    } while (attempts < maxAttempts);
+    }
     
-    // Si aucun nœud assez loin n'est trouvé, prendre le plus loin
+    // Si aucune distance parfaite, utiliser le meilleur candidat trouvé
     if (attempts >= maxAttempts) {
-        double maxDist = 0.0;
-        auto it = boost::vertices(graph);
-        for (auto v = it.first; v != it.second; ++v) {
-            double dist = heuristic(startVertex, *v);
-            if (dist > maxDist) {
-                maxDist = dist;
-                endVertex = *v;
-            }
+        endVertex = bestVertex;
+        if (bestDist > 0) {
+            // Log désactivé pour performances
+            // utils::Logger::instance().info(QString("[PathPlanner] Using best found: %1m (requested %2m)")
+            //                                .arg(bestDist).arg(minLength));
         }
     }
     

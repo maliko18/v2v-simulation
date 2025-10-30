@@ -46,15 +46,30 @@ VertexDescriptor RoadGraph::getNearestNode(double lat, double lon) const {
         return VertexDescriptor();
     }
     
-    // Recherche linéaire du nœud le plus proche
+    // Recherche du nœud le plus proche avec early exit
     double minDist = std::numeric_limits<double>::max();
     VertexDescriptor nearest;
     
+    // Limite de recherche : si on trouve un nœud à moins de 50m, on arrête
+    const double earlyExitThreshold = 0.0005; // ~50m en degrés
+    
     for (const auto& spatialNode : m_spatialIndex) {
+        // Calcul rapide de distance Manhattan avant Haversine complète
+        double dLat = std::abs(lat - spatialNode.lat);
+        double dLon = std::abs(lon - spatialNode.lon);
+        
+        // Skip si clairement trop loin (> 1° = ~111km)
+        if (dLat > 1.0 || dLon > 1.0) continue;
+        
         double dist = calculateDistance(lat, lon, spatialNode.lat, spatialNode.lon);
         if (dist < minDist) {
             minDist = dist;
             nearest = spatialNode.vertex;
+            
+            // Early exit si très proche
+            if (minDist < earlyExitThreshold) {
+                break;
+            }
         }
     }
     

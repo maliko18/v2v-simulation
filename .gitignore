@@ -65,3 +65,4 @@ vgcore.*
 # Packages
 *.tar.gz
 *.zip
+data/alsace.osm
