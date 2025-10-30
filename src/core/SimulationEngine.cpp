@@ -1,6 +1,7 @@
 #include "core/SimulationEngine.hpp"
 #include "network/RoadGraph.hpp"
 #include "network/InterferenceGraph.hpp"
+#include "network/PathPlanner.hpp"
 #include "utils/Logger.hpp"
 #include <QDateTime>
 #include <random>
@@ -13,18 +14,21 @@ SimulationEngine::SimulationEngine(QObject* parent)
     , m_state(State::Stopped)
     , m_updateTimer(new QTimer(this))
     , m_timeScale(1.0)
-    , m_targetFPS(60)
+    , m_targetFPS(30)  // Réduit de 60 à 30 FPS pour meilleures performances
     , m_currentFPS(0)
     , m_simulationTime(0.0)
     , m_roadGraph(std::make_unique<network::RoadGraph>())
     , m_interferenceGraph(std::make_unique<network::InterferenceGraph>())
+    , m_pathPlanner(nullptr)
     , m_lastUpdateTime(0)
     , m_frameCount(0)
     , m_lastFPSUpdate(0)
 {
-    // Configure timer pour 60 FPS
+    // Configure timer pour 30 FPS (meilleure performance)
     m_updateTimer->setInterval(1000 / m_targetFPS);
     connect(m_updateTimer, &QTimer::timeout, this, &SimulationEngine::updateSimulation);
+    
+    // PathPlanner sera initialisé quand le graphe routier sera chargé
     
     LOG_INFO("SimulationEngine initialized");
 }
@@ -113,35 +117,109 @@ void SimulationEngine::updateSimulation() {
     // Update vehicles
     updateVehiclePositions(deltaTime);
     
-    // Update interference graph
-    updateInterferenceGraph();
+    // Update interference graph (seulement toutes les 5 frames pour optimiser)
+    static int frameCounter = 0;
+    if (++frameCounter >= 5) {
+        updateInterferenceGraph();
+        frameCounter = 0;
+    }
     
     // Calculate FPS
     calculateFPS();
     
     m_simulationTime += deltaTime;
+    
+    // Notifier l'UI que la simulation a avancé (permet de redessiner la vue)
+    emit tick();
 }
 
 void SimulationEngine::createVehicles(int count) {
     m_vehicles.clear();
     
+    // Si pas de graphe routier ou pas de PathPlanner, création simple
+    if (!m_roadGraph || boost::num_vertices(m_roadGraph->getGraph()) == 0) {
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> lat_dist(47.73, 47.77); // Autour de Mulhouse
+        std::uniform_real_distribution<> lon_dist(7.31, 7.36);
+        std::uniform_real_distribution<> speed_dist(10.0, 25.0); // 10-25 m/s (36-90 km/h)
+        std::uniform_real_distribution<> dir_dist(0.0, 2.0 * M_PI);
+        
+        for (int i = 0; i < count; ++i) {
+            auto vehicle = std::make_shared<Vehicle>(i);
+            double lat = lat_dist(gen);
+            double lon = lon_dist(gen);
+            vehicle->setGeoPosition(lat, lon);
+            vehicle->setPosition(QPointF(lon, lat));
+            vehicle->setSpeed(speed_dist(gen));
+            vehicle->setDirection(dir_dist(gen));
+            m_vehicles.push_back(vehicle);
+            
+            emit vehicleAdded(i);
+        }
+        
+        LOG_INFO(QString("Created %1 vehicles (simple mode)").arg(count));
+        return;
+    }
+    
+    // Initialiser le PathPlanner si nécessaire
+    if (!m_pathPlanner) {
+        m_pathPlanner = std::make_unique<network::PathPlanner>(m_roadGraph.get());
+        LOG_INFO("PathPlanner initialized");
+    }
+    
+    // Création avancée avec chemins sur le graphe routier
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_real_distribution<> pos_dist(-1000.0, 1000.0);
-    std::uniform_real_distribution<> speed_dist(5.0, 20.0); // 5-20 m/s
-    std::uniform_real_distribution<> dir_dist(0.0, 2.0 * M_PI);
+    
+    // Obtenir les limites du graphe
+    const auto& graph = m_roadGraph->getGraph();
+    auto [vi, vi_end] = boost::vertices(graph);
+    
+    if (vi == vi_end) {
+        LOG_WARNING("Cannot create vehicles: empty road graph");
+        return;
+    }
+    
+    LOG_INFO(QString("Creating %1 vehicles on road graph with %2 nodes and %3 edges")
+             .arg(count)
+             .arg(boost::num_vertices(graph))
+             .arg(boost::num_edges(graph)));
+    
+    std::uniform_int_distribution<> node_dist(0, boost::num_vertices(graph) - 1);
+    std::uniform_real_distribution<> speed_dist(10.0, 25.0); // 10-25 m/s (36-90 km/h)
     
     for (int i = 0; i < count; ++i) {
         auto vehicle = std::make_shared<Vehicle>(i);
-        vehicle->setPosition(QPointF(pos_dist(gen), pos_dist(gen)));
-        vehicle->setSpeed(speed_dist(gen));
-        vehicle->setDirection(dir_dist(gen));
-        m_vehicles.push_back(vehicle);
         
+        // Choisir un nœud de départ aléatoire
+        auto startVertex = boost::vertex(node_dist(gen), graph);
+        const auto& startNode = graph[startVertex];
+        
+        QPointF startPos(startNode.longitude, startNode.latitude);
+        vehicle->setGeoPosition(startNode.latitude, startNode.longitude);
+        vehicle->setPosition(startPos);
+        vehicle->setSpeed(speed_dist(gen));
+        
+        LOG_INFO(QString("Vehicle %1: start at (%2, %3)")
+                 .arg(i)
+                 .arg(startNode.latitude, 0, 'f', 6)
+                 .arg(startNode.longitude, 0, 'f', 6));
+        
+        // Générer un chemin aléatoire d'au moins 2000m
+        auto path = m_pathPlanner->generateRandomPath(startPos, 2000.0);
+        if (!path.empty()) {
+            vehicle->setPath(path);
+            LOG_INFO(QString("Vehicle %1: path with %2 points").arg(i).arg(path.size()));
+        } else {
+            LOG_WARNING(QString("Vehicle %1: NO PATH GENERATED!").arg(i));
+        }
+        
+        m_vehicles.push_back(vehicle);
         emit vehicleAdded(i);
     }
     
-    LOG_INFO(QString("Created %1 vehicles").arg(count));
+    LOG_INFO(QString("Created %1 vehicles with paths on road network").arg(count));
 }
 
 void SimulationEngine::updateVehiclePositions(double deltaTime) {

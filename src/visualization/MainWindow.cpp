@@ -1,6 +1,8 @@
 #include "visualization/MainWindow.hpp"
 #include "visualization/MapView.hpp"
 #include "core/SimulationEngine.hpp"
+#include "network/RoadGraph.hpp"
+#include "data/OSMParser.hpp"
 #include "utils/Logger.hpp"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -94,6 +96,17 @@ void MainWindow::createUI() {
                              "QPushButton:hover { background-color: #546E7A; }");
     leftLayout->addWidget(m_btnReset);
     
+    // Bouton pour afficher/masquer les routes
+    QPushButton* btnToggleRoads = new QPushButton("🛣️ Afficher Routes", leftPanel);
+    btnToggleRoads->setCheckable(true);
+    btnToggleRoads->setStyleSheet("QPushButton { background-color: #9C27B0; color: white; padding: 8px; border-radius: 5px; }"
+                                 "QPushButton:hover { background-color: #7B1FA2; }"
+                                 "QPushButton:checked { background-color: #4CAF50; }");
+    connect(btnToggleRoads, &QPushButton::toggled, [this](bool checked) {
+        m_mapView->setShowRoadGraph(checked);
+    });
+    leftLayout->addWidget(btnToggleRoads);
+    
     // Séparateur
     QFrame* line2 = new QFrame(leftPanel);
     line2->setFrameShape(QFrame::HLine);
@@ -131,8 +144,8 @@ void MainWindow::createUI() {
     
     m_vehicleCountSpinBox = new QSpinBox(leftPanel);
     m_vehicleCountSpinBox->setMinimum(10);
-    m_vehicleCountSpinBox->setMaximum(5000);
-    m_vehicleCountSpinBox->setValue(2000);
+    m_vehicleCountSpinBox->setMaximum(500);  // Réduit de 5000 à 500 pour meilleures performances
+    m_vehicleCountSpinBox->setValue(50);  // Réduit de 2000 à 50 pour démarrage rapide
     m_vehicleCountSpinBox->setStyleSheet("QSpinBox { background-color: #3b3b3b; color: white; padding: 8px; border: 1px solid #555; border-radius: 5px; font-size: 14px; }"
                                         "QSpinBox::up-button, QSpinBox::down-button { background-color: #4CAF50; }");
     leftLayout->addWidget(m_vehicleCountSpinBox);
@@ -213,6 +226,8 @@ void MainWindow::connectSignals() {
     // Engine signals
     connect(m_engine, &core::SimulationEngine::fpsChanged,
             [this](int fps) { m_statusFPS->setText(QString("FPS: %1").arg(fps)); });
+    // Repaint map view on each simulation tick so vehicles update smoothly
+    connect(m_engine, &core::SimulationEngine::tick, m_mapView, qOverload<>(&QWidget::update));
 }
 
 void MainWindow::onStartSimulation() {
@@ -286,7 +301,45 @@ void MainWindow::onLoadOSMFile() {
     
     if (!filename.isEmpty()) {
         LOG_INFO(QString("Loading OSM file: %1").arg(filename));
-        // TODO: Load OSM into road graph
+        
+        // Utiliser OSMParser pour charger le fichier
+        v2v::data::OSMParser parser;
+        
+        // Filtrer par bounding box de Mulhouse (optionnel)
+        // parser.setBoundingBox(47.7, 7.2, 47.8, 7.4);
+        
+        auto* roadGraph = m_engine->getRoadGraph();
+        if (parser.loadFile(filename.toStdString(), roadGraph)) {
+            LOG_INFO(QString("OSM file loaded successfully: %1 nodes, %2 edges")
+                     .arg(roadGraph->getNodeCount())
+                     .arg(roadGraph->getEdgeCount()));
+            
+            // Recréer les véhicules pour qu'ils utilisent le nouveau graphe routier
+            int currentVehicleCount = m_vehicleCountSpinBox->value();
+            if (currentVehicleCount > 0) {
+                m_engine->setVehicleCount(currentVehicleCount);
+                LOG_INFO(QString("Recreated %1 vehicles on road network").arg(currentVehicleCount));
+            }
+            
+            QMessageBox::information(
+                this,
+                "OSM Loaded",
+                QString("Road graph loaded successfully!\n\nNodes: %1\nEdges: %2\nVehicles: %3")
+                    .arg(roadGraph->getNodeCount())
+                    .arg(roadGraph->getEdgeCount())
+                    .arg(currentVehicleCount)
+            );
+            
+            // Rafraîchir l'affichage
+            m_mapView->update();
+        } else {
+            LOG_ERROR("Failed to load OSM file");
+            QMessageBox::warning(
+                this,
+                "Error",
+                "Failed to load OSM file. Check the log for details."
+            );
+        }
     }
 }
 

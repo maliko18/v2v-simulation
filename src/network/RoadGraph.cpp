@@ -1,5 +1,7 @@
 #include "network/RoadGraph.hpp"
 #include "utils/Logger.hpp"
+#include <limits>
+#include <cmath>
 
 namespace v2v {
 namespace network {
@@ -9,7 +11,7 @@ RoadGraph::RoadGraph() {
 }
 
 void RoadGraph::loadFromOSM(const std::string& osmFile) {
-    // TODO: Implement OSM loading with libosmium
+    // Cette fonction est maintenant appelée via OSMParser
     LOG_INFO(QString("Loading OSM file: %1").arg(QString::fromStdString(osmFile)));
 }
 
@@ -23,7 +25,7 @@ VertexDescriptor RoadGraph::addNode(double lat, double lon) {
     node.id = boost::num_vertices(m_graph);
     node.latitude = lat;
     node.longitude = lon;
-    node.position = QPointF(lon, lat); // Simplified
+    node.position = QPointF(lon, lat);
     
     return boost::add_vertex(node, m_graph);
 }
@@ -39,13 +41,32 @@ void RoadGraph::addEdge(VertexDescriptor from, VertexDescriptor to,
 }
 
 VertexDescriptor RoadGraph::getNearestNode(double lat, double lon) const {
-    // TODO: Use spatial index
-    return VertexDescriptor();
+    if (m_spatialIndex.empty()) {
+        LOG_WARNING("Spatial index is empty");
+        return VertexDescriptor();
+    }
+    
+    // Recherche linéaire du nœud le plus proche
+    double minDist = std::numeric_limits<double>::max();
+    VertexDescriptor nearest;
+    
+    for (const auto& spatialNode : m_spatialIndex) {
+        double dist = calculateDistance(lat, lon, spatialNode.lat, spatialNode.lon);
+        if (dist < minDist) {
+            minDist = dist;
+            nearest = spatialNode.vertex;
+        }
+    }
+    
+    return nearest;
 }
 
 std::vector<VertexDescriptor> RoadGraph::getPath(VertexDescriptor start, VertexDescriptor end) {
-    // TODO: Implement Dijkstra/A*
-    return std::vector<VertexDescriptor>();
+    // TODO: Implement Dijkstra/A* (sera fait dans PathPlanner)
+    std::vector<VertexDescriptor> path;
+    path.push_back(start);
+    path.push_back(end);
+    return path;
 }
 
 size_t RoadGraph::getNodeCount() const {
@@ -57,7 +78,35 @@ size_t RoadGraph::getEdgeCount() const {
 }
 
 void RoadGraph::buildSpatialIndex() {
-    // TODO: Build R-tree from nodes
+    LOG_INFO("Building spatial index...");
+    m_spatialIndex.clear();
+    
+    // Parcourir tous les vertices
+    auto vertices = boost::vertices(m_graph);
+    for (auto it = vertices.first; it != vertices.second; ++it) {
+        const RoadNode& node = m_graph[*it];
+        
+        SpatialNode spatialNode;
+        spatialNode.vertex = *it;
+        spatialNode.lat = node.latitude;
+        spatialNode.lon = node.longitude;
+        
+        m_spatialIndex.push_back(spatialNode);
+    }
+    
+    LOG_INFO(QString("Spatial index built with %1 nodes").arg(m_spatialIndex.size()));
+}
+
+double RoadGraph::calculateDistance(double lat1, double lon1, double lat2, double lon2) const {
+    // Formule de Haversine
+    const double R = 6371000.0; // Rayon Terre en mètres
+    double dLat = (lat2 - lat1) * M_PI / 180.0;
+    double dLon = (lon2 - lon1) * M_PI / 180.0;
+    double a = std::sin(dLat/2) * std::sin(dLat/2) +
+               std::cos(lat1 * M_PI / 180.0) * std::cos(lat2 * M_PI / 180.0) *
+               std::sin(dLon/2) * std::sin(dLon/2);
+    double c = 2 * std::atan2(std::sqrt(a), std::sqrt(1-a));
+    return R * c;
 }
 
 } // namespace network

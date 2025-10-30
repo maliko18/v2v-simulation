@@ -5,6 +5,11 @@
 #include <QPointF>
 #include <vector>
 #include <memory>
+#include <cmath>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 namespace v2v {
 namespace network {
@@ -73,6 +78,9 @@ public:
     const RoadGraphType& getGraph() const { return m_graph; }
     RoadGraphType& getGraph() { return m_graph; }
     
+    // Index spatial
+    void buildSpatialIndex();
+    
 private:
     RoadGraphType m_graph;
     
@@ -83,7 +91,7 @@ private:
     };
     std::vector<SpatialNode> m_spatialIndex;
     
-    void buildSpatialIndex();
+    double calculateDistance(double lat1, double lon1, double lat2, double lon2) const;
 };
 
 } // namespace network

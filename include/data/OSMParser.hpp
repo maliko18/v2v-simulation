@@ -42,6 +42,9 @@ public:
 private:
     class Impl;
     std::unique_ptr<Impl> m_impl;
+    
+    double calculateDistance(double lat1, double lon1, double lat2, double lon2) const;
+    bool generateTestGraph(network::RoadGraph* roadGraph);
 };
 
 } // namespace data

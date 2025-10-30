@@ -55,6 +55,11 @@ QPixmap TileManager::getTile(int zoom, int x, int y) {
 }
 
 void TileManager::downloadTileAsync(const TileCoord& coord) {
+    // Limiter les téléchargements simultanés pour ne pas surcharger le serveur
+    if (m_pendingDownloads.size() >= 6) {
+        return;  // Attendre que certains téléchargements se terminent
+    }
+    
     // URL du serveur de tuiles OSM
     QString url = QString("https://tile.openstreetmap.org/%1/%2/%3.png")
                     .arg(coord.zoom)
@@ -63,6 +68,9 @@ void TileManager::downloadTileAsync(const TileCoord& coord) {
     
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::UserAgentHeader, "V2V-Simulator/1.0");
+    
+    // Politesse OSM : ajouter un délai entre les requêtes
+    request.setAttribute(QNetworkRequest::HttpPipeliningAllowedAttribute, false);
     
     // Stocker les coordonnées dans la requête pour les retrouver plus tard
     request.setAttribute(QNetworkRequest::User, coord.zoom);
@@ -77,6 +85,9 @@ void TileManager::downloadTileAsync(const TileCoord& coord) {
     connect(reply, &QNetworkReply::finished, this, [this, reply]() {
         onDownloadFinished(reply);
     });
+    
+    LOG_DEBUG(QString("Downloading tile %1/%2/%3 (%4 pending)")
+              .arg(coord.zoom).arg(coord.x).arg(coord.y).arg(m_pendingDownloads.size()));
 }
 
 void TileManager::onDownloadFinished(QNetworkReply* reply) {
@@ -142,11 +153,64 @@ QString TileManager::getTilePath(const TileCoord& coord) const {
 }
 
 void TileManager::preloadArea(double centerLat, double centerLon, int zoom, int radius) {
-    Q_UNUSED(centerLat);
-    Q_UNUSED(centerLon);
-    Q_UNUSED(zoom);
-    Q_UNUSED(radius);
-    // TODO: Implémenter le préchargement
+    // Calculer les tuiles à précharger autour du centre
+    int n = 1 << zoom;  // 2^zoom
+    
+    // Convertir lat/lon en coordonnées de tuile
+    double centerTileX = (centerLon + 180.0) / 360.0 * n;
+    double latRad = centerLat * M_PI / 180.0;
+    double centerTileY = (1.0 - std::log(std::tan(latRad) + 1.0 / std::cos(latRad)) / M_PI) / 2.0 * n;
+    
+    int centerX = static_cast<int>(centerTileX);
+    int centerY = static_cast<int>(centerTileY);
+    
+    LOG_INFO(QString("Preloading tiles around %1,%2 (zoom %3, radius %4)")
+             .arg(centerLat).arg(centerLon).arg(zoom).arg(radius));
+    
+    int tileCount = 0;
+    // Parcourir les tuiles dans le rayon
+    for (int dx = -radius; dx <= radius; dx++) {
+        for (int dy = -radius; dy <= radius; dy++) {
+            int tileX = centerX + dx;
+            int tileY = centerY + dy;
+            
+            // Vérifier les limites
+            if (tileX < 0 || tileX >= n || tileY < 0 || tileY >= n) {
+                continue;
+            }
+            
+            TileCoord coord{zoom, tileX, tileY};
+            
+            // Vérifier si déjà en cache
+            if (m_memoryCache.find(coord) != m_memoryCache.end()) {
+                continue;
+            }
+            
+            // Vérifier si déjà en cours de téléchargement
+            if (m_pendingDownloads.find(coord) != m_pendingDownloads.end()) {
+                continue;
+            }
+            
+            // Vérifier si sur disque
+            QPixmap tile;
+            if (loadFromDisk(coord, tile)) {
+                m_memoryCache[coord] = tile;
+                continue;
+            }
+            
+            // Lancer le téléchargement
+            downloadTileAsync(coord);
+            tileCount++;
+            
+            // Limiter le nombre de téléchargements simultanés
+            if (tileCount >= 20) {
+                LOG_INFO(QString("Preload batch limit reached, will continue as tiles finish"));
+                return;
+            }
+        }
+    }
+    
+    LOG_INFO(QString("Preload initiated: %1 tiles queued for download").arg(tileCount));
 }
 
 void TileManager::setMaxCacheSize(size_t sizeBytes) {

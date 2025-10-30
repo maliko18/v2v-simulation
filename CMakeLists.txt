@@ -117,7 +117,7 @@ message(STATUS "TBB found")
 # Find Eigen3 (Math library)
 # ============================================================================
 
-find_package(Eigen3 3.4 REQUIRED)
+find_package(Eigen3 CONFIG REQUIRED)   # no version
 message(STATUS "Eigen3 found: ${EIGEN3_VERSION}")
 
 # ============================================================================

@@ -60,6 +60,7 @@ public:
 protected:
     // Qt overrides
     void paintEvent(QPaintEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;
     
     // Mouse events
     void mousePressEvent(QMouseEvent* event) override;

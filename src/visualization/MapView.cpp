@@ -3,11 +3,15 @@
 #include "visualization/VehicleRenderer.hpp"
 #include "visualization/GraphOverlay.hpp"
 #include "core/SimulationEngine.hpp"
+#include "network/RoadGraph.hpp"
 #include "data/TileManager.hpp"
 #include "utils/Logger.hpp"
 #include <QPainter>
 #include <QPaintEvent>
+#include <QKeyEvent>
 #include <QPointF>
+#include <QDateTime>
+#include <boost/graph/graph_traits.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -28,10 +32,10 @@ MapView::MapView(QWidget* parent)
     , m_scale(1.0)
     , m_isDragging(false)
     , m_showVehicles(true)
-    , m_showConnections(true)
+    , m_showConnections(false)  // Désactivé par défaut pour meilleures performances
     , m_showRoadGraph(false)
     , m_vsyncEnabled(false)
-    , m_antialiasingEnabled(true)
+    , m_antialiasingEnabled(false)  // Désactivé par défaut pour meilleures performances
     , m_frameCount(0)
     , m_lastFPSTime(0)
 {
@@ -56,6 +60,9 @@ MapView::MapView(QWidget* parent)
                 }
             });
     
+    // Précharger les tuiles autour de Mulhouse au démarrage
+    m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 2);
+    
     LOG_INFO("MapView created with OSM tile support");
 }
 
@@ -68,13 +75,24 @@ void MapView::setSimulationEngine(core::SimulationEngine* engine) {
 }
 
 void MapView::setCenter(double latitude, double longitude) {
-    m_centerLat = latitude;
-    m_centerLon = longitude;
+    m_centerLat = std::clamp(latitude, -85.0511, 85.0511);  // Limites Web Mercator
+    m_centerLon = std::fmod(longitude + 180.0, 360.0) - 180.0;  // Normaliser -180 à 180
+    
+    // Précharger les tuiles autour de la nouvelle position
+    m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 2);
+    
     update();
 }
 
 void MapView::setZoomLevel(int level) {
+    int oldZoom = m_zoomLevel;
     m_zoomLevel = std::clamp(level, 0, 19);
+    
+    // Précharger si le zoom a changé
+    if (oldZoom != m_zoomLevel) {
+        m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 2);
+    }
+    
     update();
 }
 
@@ -110,6 +128,7 @@ void MapView::paintEvent(QPaintEvent* event) {
     if (m_antialiasingEnabled && !m_isDragging) {
         painter.setRenderHint(QPainter::Antialiasing);
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
+        painter.setRenderHint(QPainter::TextAntialiasing);
     }
     
     // Fond de carte OSM (bleu clair comme l'eau)
@@ -118,30 +137,169 @@ void MapView::paintEvent(QPaintEvent* event) {
     // Dessiner les tuiles OSM
     drawOSMTiles(painter);
     
-    // Dessiner les véhicules
+    // Dessiner les véhicules si activé
     if (m_showVehicles && m_engine) {
         const auto& vehicles = m_engine->getVehicles();
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 100, 230));
+        
+        // Compteur pour limiter le nombre de véhicules dessinés (optimisation)
+        int drawnVehicles = 0;
+        const int maxDrawnVehicles = 500;  // Ne dessiner que les 500 premiers véhicules visibles
+        
+        // Dessiner les zones de transmission en premier (si connexions activées)
+        if (m_showConnections) {
+            painter.setPen(Qt::NoPen);
+            for (const auto& vehicle : vehicles) {
+                if (!vehicle->isActive()) continue;
+                
+                QPointF screenPos = latLonToScreen(vehicle->getLatitude(), vehicle->getLongitude());
+                
+                // Vérifier si visible
+                if (screenPos.x() < -100 || screenPos.x() > width() + 100 ||
+                    screenPos.y() < -100 || screenPos.y() > height() + 100) {
+                    continue;
+                }
+                
+                // Rayon de transmission (converti en pixels)
+                double radiusMeters = vehicle->getTransmissionRadius();
+                double radiusPixels = radiusMeters * std::pow(2.0, m_zoomLevel) / 156543.03392 / std::cos(vehicle->getLatitude() * M_PI / 180.0);
+                
+                // Zone semi-transparente
+                painter.setBrush(QColor(100, 200, 255, 30));
+                painter.drawEllipse(screenPos, radiusPixels, radiusPixels);
+            }
+        }
+        
+        // Dessiner les véhicules par-dessus
+        painter.setPen(QPen(QColor(0, 0, 0), 2));
+        painter.setBrush(QColor(255, 50, 50));
         
         for (const auto& vehicle : vehicles) {
-            QPointF pos = vehicle->getPosition();
-            QPointF screenPos = latLonToScreen(pos.y(), pos.x()); // lat, lon
-            painter.drawEllipse(screenPos, 4, 4);
+            if (!vehicle->isActive()) continue;
+            if (drawnVehicles >= maxDrawnVehicles) break;  // Limite atteinte
+            
+            QPointF screenPos = latLonToScreen(vehicle->getLatitude(), vehicle->getLongitude());
+            
+            // Vérifier si le véhicule est visible à l'écran (frustum culling)
+            if (screenPos.x() < -50 || screenPos.x() > width() + 50 ||
+                screenPos.y() < -50 || screenPos.y() > height() + 50) {
+                continue;
+            }
+            
+            drawnVehicles++;
+            
+            // Dessiner le véhicule comme un cercle avec direction
+            painter.save();
+            painter.translate(screenPos);
+            painter.rotate(vehicle->getDirection() * 180.0 / M_PI);
+            
+            // Corps du véhicule (rectangle arrondi)
+            painter.drawEllipse(QPointF(0, 0), 5, 5);
+            
+            // Indicateur de direction (petit triangle)
+            painter.setBrush(QColor(255, 255, 0));
+            QPolygonF arrow;
+            arrow << QPointF(0, -8) << QPointF(-3, -3) << QPointF(3, -3);
+            painter.drawPolygon(arrow);
+            
+            painter.restore();
+        }
+    }
+    
+    // Dessiner le graphe routier si activé
+    if (m_showRoadGraph && m_engine) {
+        auto* roadGraph = m_engine->getRoadGraph();
+        if (roadGraph && roadGraph->getNodeCount() > 0) {
+            const auto& graph = roadGraph->getGraph();
+            
+            // Dessiner les arêtes (routes) - couleur bleu foncé bien visible
+            painter.setPen(QPen(QColor(0, 0, 255, 200), 3));
+            auto [ei, ei_end] = boost::edges(graph);
+            for (auto it = ei; it != ei_end; ++it) {
+                auto source = boost::source(*it, graph);
+                auto target = boost::target(*it, graph);
+                
+                const auto& nodeSource = graph[source];
+                const auto& nodeTarget = graph[target];
+                
+                QPointF p1 = latLonToScreen(nodeSource.latitude, nodeSource.longitude);
+                QPointF p2 = latLonToScreen(nodeTarget.latitude, nodeTarget.longitude);
+                
+                // Ne dessiner que les arêtes visibles
+                if ((p1.x() >= -50 && p1.x() <= width() + 50 && p1.y() >= -50 && p1.y() <= height() + 50) ||
+                    (p2.x() >= -50 && p2.x() <= width() + 50 && p2.y() >= -50 && p2.y() <= height() + 50)) {
+                    painter.drawLine(p1, p2);
+                }
+            }
+            
+            // Dessiner les nœuds (intersections) - jaune bien visible
+            painter.setPen(QPen(QColor(0, 0, 0), 2));
+            painter.setBrush(QColor(255, 255, 0, 255));
+            auto [vi, vi_end] = boost::vertices(graph);
+            for (auto it = vi; it != vi_end; ++it) {
+                const auto& node = graph[*it];
+                QPointF p = latLonToScreen(node.latitude, node.longitude);
+                
+                // Ne dessiner que les nœuds visibles
+                if (p.x() >= -10 && p.x() <= width() + 10 && p.y() >= -10 && p.y() <= height() + 10) {
+                    painter.drawEllipse(p, 4, 4);
+                }
+            }
         }
     }
     
     // UI overlay (pas affecté par pan/zoom)
-    painter.setPen(Qt::white);
-    painter.setBrush(QColor(0, 0, 0, 150));
-    painter.drawRect(5, 5, 200, 95);
+    painter.setRenderHint(QPainter::Antialiasing, false);
     
+    // Fond semi-transparent pour les infos
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(0, 0, 0, 180));
+    painter.drawRoundedRect(5, 5, 250, 110, 5, 5);
+    
+    // Texte des informations
     painter.setPen(Qt::white);
-    painter.setFont(QFont("Arial", 11));
-    painter.drawText(10, 25, QString("Zoom: %1").arg(m_zoomLevel));
-    painter.drawText(10, 45, QString("Lat: %1").arg(m_centerLat, 0, 'f', 5));
-    painter.drawText(10, 65, QString("Lon: %1").arg(m_centerLon, 0, 'f', 5));
-    painter.drawText(10, 85, QString("Mulhouse, France"));
+    painter.setFont(QFont("Arial", 11, QFont::Bold));
+    painter.drawText(15, 25, "📍 CARTE OSM");
+    
+    painter.setFont(QFont("Arial", 10));
+    painter.drawText(15, 45, QString("Zoom: %1 (molette)").arg(m_zoomLevel));
+    painter.drawText(15, 63, QString("Lat: %1").arg(m_centerLat, 0, 'f', 5));
+    painter.drawText(15, 81, QString("Lon: %1").arg(m_centerLon, 0, 'f', 5));
+    painter.drawText(15, 99, QString("📍 Mulhouse, France"));
+    
+    // Contrôles
+    painter.setPen(QColor(180, 180, 180));
+    painter.setFont(QFont("Arial", 9));
+    QString controls = "🖱️ Clic: pan | Molette: zoom | ⌨️ Flèches/+/- | H: home | V: véhicules | C: connexions | R: routes";
+    painter.drawText(10, height() - 10, controls);
+    
+    // Compteur de véhicules si activé
+    if (m_showVehicles && m_engine) {
+        int vehicleCount = m_engine->getActiveVehicleCount();
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(0, 150, 0, 180));
+        painter.drawRoundedRect(width() - 155, 5, 150, 40, 5, 5);
+        
+        painter.setPen(Qt::white);
+        painter.setFont(QFont("Arial", 11, QFont::Bold));
+        painter.drawText(width() - 145, 25, QString("🚗 %1 véhicules").arg(vehicleCount));
+    }
+    
+    // FPS counter (calcul toutes les secondes)
+    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+    if (currentTime - m_lastFPSTime >= 1000) {
+        double fps = m_frameCount * 1000.0 / (currentTime - m_lastFPSTime);
+        m_lastFPSTime = currentTime;
+        m_frameCount = 0;
+        
+        // Afficher FPS dans le coin
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(0, 0, 0, 150));
+        painter.drawRoundedRect(width() - 90, height() - 35, 85, 30, 5, 5);
+        
+        painter.setPen(fps >= 55 ? QColor(0, 255, 0) : (fps >= 30 ? QColor(255, 165, 0) : QColor(255, 0, 0)));
+        painter.setFont(QFont("Arial", 10, QFont::Bold));
+        painter.drawText(width() - 80, height() - 13, QString("FPS: %1").arg(static_cast<int>(fps)));
+    }
     
     m_frameCount++;
 }
@@ -155,53 +313,58 @@ void MapView::drawOSMTiles(QPainter& painter) {
     // Formule OpenStreetMap: https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames
     
     int zoom = m_zoomLevel;
-    double n = std::pow(2.0, zoom);
+    int n = 1 << zoom;  // 2^zoom, plus rapide que pow
     
-    // Convertir le centre en coordonnées de tuile
+    // Convertir le centre en coordonnées de tuile (projection Web Mercator)
     double centerTileX = (m_centerLon + 180.0) / 360.0 * n;
-    double centerTileY = (1.0 - std::log(std::tan(m_centerLat * M_PI / 180.0) + 
-                          1.0 / std::cos(m_centerLat * M_PI / 180.0)) / M_PI) / 2.0 * n;
+    double latRad = m_centerLat * M_PI / 180.0;
+    double centerTileY = (1.0 - std::log(std::tan(latRad) + 1.0 / std::cos(latRad)) / M_PI) / 2.0 * n;
     
-    // Calculer combien de tuiles sont visibles
-    int tilesX = (width() / 256) + 2;  // +2 pour les bords
-    int tilesY = (height() / 256) + 2;
+    // Calculer combien de tuiles sont visibles (avec marge)
+    int tilesX = (width() / 256) + 3;  // +3 pour assurer couverture complète
+    int tilesY = (height() / 256) + 3;
+    
+    // Offset fractionnaire pour un déplacement fluide
+    double offsetX = (centerTileX - std::floor(centerTileX)) * 256.0;
+    double offsetY = (centerTileY - std::floor(centerTileY)) * 256.0;
     
     // Dessiner les tuiles
     for (int dx = -tilesX/2; dx <= tilesX/2; dx++) {
         for (int dy = -tilesY/2; dy <= tilesY/2; dy++) {
-            int tileX = static_cast<int>(centerTileX) + dx;
-            int tileY = static_cast<int>(centerTileY) + dy;
+            int tileX = static_cast<int>(std::floor(centerTileX)) + dx;
+            int tileY = static_cast<int>(std::floor(centerTileY)) + dy;
             
-            // Vérifier les limites
-            if (tileX < 0 || tileX >= n || tileY < 0 || tileY >= n) {
+            // Vérifier les limites (avec wrapping horizontal)
+            if (tileX < 0) tileX += n;
+            if (tileX >= n) tileX -= n;
+            if (tileY < 0 || tileY >= n) {
                 continue;
             }
+            
+            // Calculer la position d'affichage précise avec sub-pixel
+            double screenX = width() / 2.0 + dx * 256.0 - offsetX;
+            double screenY = height() / 2.0 + dy * 256.0 - offsetY;
             
             // Obtenir la tuile (télécharge si nécessaire)
             QPixmap tile = m_tileManager->getTile(zoom, tileX, tileY);
             
             if (!tile.isNull()) {
-                // Calculer la position d'affichage
-                double screenX = width() / 2.0 + (tileX - centerTileX) * 256.0;
-                double screenY = height() / 2.0 + (tileY - centerTileY) * 256.0;
-                
-                painter.drawPixmap(static_cast<int>(screenX), 
-                                 static_cast<int>(screenY), 
-                                 tile);
+                // Dessiner la tuile avec transformation précise
+                painter.drawPixmap(QRectF(screenX, screenY, 256, 256), tile, tile.rect());
             } else {
                 // Tuile en cours de téléchargement - afficher un placeholder
-                double screenX = width() / 2.0 + (tileX - centerTileX) * 256.0;
-                double screenY = height() / 2.0 + (tileY - centerTileY) * 256.0;
+                painter.fillRect(QRectF(screenX, screenY, 256, 256), QColor(240, 240, 240));
                 
-                painter.fillRect(static_cast<int>(screenX), 
-                               static_cast<int>(screenY), 
-                               256, 256, 
-                               QColor(230, 230, 230));
+                // Grille pour montrer les limites de tuile
+                painter.setPen(QPen(QColor(200, 200, 200), 1));
+                painter.drawRect(QRectF(screenX, screenY, 256, 256));
                 
+                // Texte "Loading..."
                 painter.setPen(QColor(150, 150, 150));
-                painter.drawText(static_cast<int>(screenX) + 100, 
-                               static_cast<int>(screenY) + 128, 
-                               "Loading...");
+                painter.setFont(QFont("Arial", 10));
+                painter.drawText(QRectF(screenX, screenY, 256, 256), 
+                               Qt::AlignCenter, 
+                               QString("Loading...\n%1/%2/%3").arg(zoom).arg(tileX).arg(tileY));
             }
         }
     }
@@ -288,6 +451,10 @@ void MapView::mouseReleaseEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
         m_isDragging = false;
         setCursor(Qt::ArrowCursor);
+        
+        // Précharger les tuiles autour de la nouvelle position
+        m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 2);
+        
         update();  // Force un dernier update avec antialiasing
     }
 }
@@ -299,6 +466,8 @@ void MapView::wheelEvent(QWheelEvent* event) {
     
     // Changer le zoom
     int delta = event->angleDelta().y();
+    int oldZoom = m_zoomLevel;
+    
     if (delta > 0 && m_zoomLevel < 19) {
         setZoomLevel(m_zoomLevel + 1);
     } else if (delta < 0 && m_zoomLevel > 1) {
@@ -311,11 +480,95 @@ void MapView::wheelEvent(QWheelEvent* event) {
     m_centerLat += (oldLat - newLat);
     m_centerLon += (oldLon - newLon);
     
+    // Précharger les tuiles au nouveau niveau de zoom si changé
+    if (oldZoom != m_zoomLevel) {
+        m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 2);
+    }
+    
     update();
 }
 
 void MapView::onSimulationUpdate() {
     update(); // Trigger repaint
+}
+
+void MapView::keyPressEvent(QKeyEvent* event) {
+    const double panSpeed = 0.01; // Degrés de latitude/longitude
+    bool needsUpdate = false;
+    
+    switch (event->key()) {
+        // Déplacement avec flèches
+        case Qt::Key_Left:
+            m_centerLon -= panSpeed;
+            needsUpdate = true;
+            break;
+        case Qt::Key_Right:
+            m_centerLon += panSpeed;
+            needsUpdate = true;
+            break;
+        case Qt::Key_Up:
+            m_centerLat += panSpeed;
+            needsUpdate = true;
+            break;
+        case Qt::Key_Down:
+            m_centerLat -= panSpeed;
+            needsUpdate = true;
+            break;
+            
+        // Zoom avec + / -
+        case Qt::Key_Plus:
+        case Qt::Key_Equal:
+            if (m_zoomLevel < 19) {
+                setZoomLevel(m_zoomLevel + 1);
+                needsUpdate = true;
+            }
+            break;
+        case Qt::Key_Minus:
+            if (m_zoomLevel > 1) {
+                setZoomLevel(m_zoomLevel - 1);
+                needsUpdate = true;
+            }
+            break;
+            
+        // Retour à Mulhouse avec 'H' (Home)
+        case Qt::Key_H:
+            setCenter(47.7508, 7.3359);
+            setZoomLevel(13);
+            needsUpdate = true;
+            break;
+            
+        // Toggle affichage véhicules avec 'V'
+        case Qt::Key_V:
+            setShowVehicles(!m_showVehicles);
+            needsUpdate = true;
+            break;
+            
+        // Toggle affichage connexions avec 'C'
+        case Qt::Key_C:
+            setShowConnections(!m_showConnections);
+            needsUpdate = true;
+            break;
+            
+        // Toggle affichage graphe routier avec 'R'
+        case Qt::Key_R:
+            setShowRoadGraph(!m_showRoadGraph);
+            needsUpdate = true;
+            break;
+            
+        // Toggle antialiasing avec 'A'
+        case Qt::Key_A:
+            setAntialiasing(!m_antialiasingEnabled);
+            needsUpdate = true;
+            break;
+            
+        default:
+            QWidget::keyPressEvent(event);
+            return;
+    }
+    
+    if (needsUpdate) {
+        update();
+    }
 }
 
 } // namespace visualization

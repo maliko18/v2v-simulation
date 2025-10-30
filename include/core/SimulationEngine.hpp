@@ -12,6 +12,7 @@ namespace v2v {
 namespace network { 
     class RoadGraph; 
     class InterferenceGraph;
+    class PathPlanner;
 }
 
 namespace core {
@@ -54,6 +55,7 @@ public:
     const std::vector<std::shared_ptr<Vehicle>>& getVehicles() const { return m_vehicles; }
     network::RoadGraph* getRoadGraph() const { return m_roadGraph.get(); }
     network::InterferenceGraph* getInterferenceGraph() const { return m_interferenceGraph.get(); }
+    network::PathPlanner* getPathPlanner() const { return m_pathPlanner.get(); }
     
     // État
     State getState() const { return m_state; }
@@ -70,6 +72,8 @@ signals:
     void vehicleRemoved(int vehicleId);
     void fpsChanged(int fps);
     void vehicleCountChanged(int count);
+    /** Emitted every simulation update (frame) */
+    void tick();
 
 private slots:
     void updateSimulation();
@@ -90,6 +94,7 @@ private:
     std::vector<std::shared_ptr<Vehicle>> m_vehicles;
     std::unique_ptr<network::RoadGraph> m_roadGraph;
     std::unique_ptr<network::InterferenceGraph> m_interferenceGraph;
+    std::unique_ptr<network::PathPlanner> m_pathPlanner;
     
     // Performance monitoring
     qint64 m_lastUpdateTime;
