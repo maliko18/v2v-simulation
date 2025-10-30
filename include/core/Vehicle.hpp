@@ -52,6 +52,15 @@ public:
     void clearPath();
     bool hasPath() const;
     
+    // Communication V2V
+    void setNeighbors(const std::vector<int>& neighbors);
+    const std::vector<int>& getNeighbors() const { return m_connectedVehicles; }
+    int getNeighborCount() const { return m_connectedVehicles.size(); }
+    
+    // État pour messages CAM
+    double getAcceleration() const { return m_acceleration; }
+    void setAcceleration(double accel) { m_acceleration = accel; }
+    
 signals:
     void positionChanged(int vehicleId, QPointF newPosition);
     void speedChanged(int vehicleId, double newSpeed);
@@ -65,6 +74,7 @@ private:
     double m_longitude;
     double m_speed;              // m/s
     double m_direction;          // Radians (0 = Nord)
+    double m_acceleration;       // m/s² (pour messages CAM)
     int m_transmissionRadius;    // Mètres (100-500)
     bool m_isActive;
     
@@ -72,7 +82,7 @@ private:
     std::vector<QPointF> m_path;
     size_t m_currentPathIndex;
     
-    // Connectivité
+    // Connectivité (voisins V2V)
     std::vector<int> m_connectedVehicles;
 };
 

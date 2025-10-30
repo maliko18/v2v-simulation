@@ -15,6 +15,10 @@ namespace network {
     class PathPlanner;
 }
 
+namespace communication {
+    class V2VCommunicationManager;
+}
+
 namespace core {
 
 /**
@@ -56,6 +60,12 @@ public:
     network::RoadGraph* getRoadGraph() const { return m_roadGraph.get(); }
     network::InterferenceGraph* getInterferenceGraph() const { return m_interferenceGraph.get(); }
     network::PathPlanner* getPathPlanner() const { return m_pathPlanner.get(); }
+    communication::V2VCommunicationManager* getV2VManager() const { return m_v2vManager.get(); }
+    
+    // Configuration V2V
+    void setV2VEnabled(bool enabled) { m_v2vEnabled = enabled; }
+    bool isV2VEnabled() const { return m_v2vEnabled; }
+    void setCAMFrequency(double hz) { m_camFrequency = hz; }  // 1-10 Hz
     
     // État
     State getState() const { return m_state; }
@@ -82,6 +92,7 @@ private:
     void createVehicles(int count);
     void updateVehiclePositions(double deltaTime);
     void updateInterferenceGraph();
+    void updateV2VCommunication();  // Nouvelle méthode
     void calculateFPS();
     void generatePathsProgressively();  // Nouvelle méthode pour génération progressive
     
@@ -96,6 +107,12 @@ private:
     std::unique_ptr<network::RoadGraph> m_roadGraph;
     std::unique_ptr<network::InterferenceGraph> m_interferenceGraph;
     std::unique_ptr<network::PathPlanner> m_pathPlanner;
+    std::unique_ptr<communication::V2VCommunicationManager> m_v2vManager;
+    
+    // Configuration V2V
+    bool m_v2vEnabled;
+    double m_camFrequency;  // Hz (messages CAM par seconde)
+    double m_lastCAMTime;
     
     // Performance monitoring
     qint64 m_lastUpdateTime;

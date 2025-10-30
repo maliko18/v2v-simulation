@@ -13,6 +13,7 @@ Vehicle::Vehicle(int id, QObject* parent)
     , m_longitude(0.0)
     , m_speed(0.0)
     , m_direction(0.0)
+    , m_acceleration(0.0)
     , m_transmissionRadius(300)
     , m_isActive(true)
     , m_currentPathIndex(0)
@@ -129,6 +130,25 @@ void Vehicle::clearPath() {
 
 bool Vehicle::hasPath() const {
     return !m_path.empty() && m_currentPathIndex < m_path.size();
+}
+
+void Vehicle::setNeighbors(const std::vector<int>& neighbors) {
+    // Détecter les nouvelles connexions
+    for (int newNeighbor : neighbors) {
+        if (std::find(m_connectedVehicles.begin(), m_connectedVehicles.end(), newNeighbor) 
+            == m_connectedVehicles.end()) {
+            emit connectionEstablished(m_id, newNeighbor);
+        }
+    }
+    
+    // Détecter les connexions perdues
+    for (int oldNeighbor : m_connectedVehicles) {
+        if (std::find(neighbors.begin(), neighbors.end(), oldNeighbor) == neighbors.end()) {
+            emit connectionLost(m_id, oldNeighbor);
+        }
+    }
+    
+    m_connectedVehicles = neighbors;
 }
 
 } // namespace core

@@ -2,6 +2,8 @@
 #include "network/RoadGraph.hpp"
 #include "network/InterferenceGraph.hpp"
 #include "network/PathPlanner.hpp"
+#include "communication/V2VCommunicationManager.hpp"
+#include "communication/V2VMessage.hpp"
 #include "utils/Logger.hpp"
 #include <QDateTime>
 #include <random>
@@ -21,6 +23,10 @@ SimulationEngine::SimulationEngine(QObject* parent)
     , m_roadGraph(std::make_unique<network::RoadGraph>())
     , m_interferenceGraph(std::make_unique<network::InterferenceGraph>())
     , m_pathPlanner(nullptr)
+    , m_v2vManager(std::make_unique<communication::V2VCommunicationManager>())
+    , m_v2vEnabled(true)   // V2V activé par défaut
+    , m_camFrequency(5.0)  // 5 Hz = 5 messages CAM/seconde
+    , m_lastCAMTime(0.0)
     , m_lastUpdateTime(0)
     , m_frameCount(0)
     , m_lastFPSUpdate(0)
@@ -31,9 +37,12 @@ SimulationEngine::SimulationEngine(QObject* parent)
     m_updateTimer->setInterval(1000 / m_targetFPS);
     connect(m_updateTimer, &QTimer::timeout, this, &SimulationEngine::updateSimulation);
     
+    // Lier V2VManager avec InterferenceGraph
+    m_v2vManager->setInterferenceGraph(m_interferenceGraph.get());
+    
     // PathPlanner sera initialisé quand le graphe routier sera chargé
     
-    LOG_INFO("SimulationEngine initialized");
+    LOG_INFO("SimulationEngine initialized with V2V communication");
 }
 
 SimulationEngine::~SimulationEngine() {
@@ -123,12 +132,18 @@ void SimulationEngine::updateSimulation() {
     // NE PLUS générer de chemins pendant la simulation (déplacé au démarrage)
     // generatePathsProgressively();
     
-    // DÉSACTIVÉ: Graphe d'interférence trop lourd avec 2000 véhicules (O(n²))
-    // Update interference graph toutes les 10 frames (constant, pas d'augmentation)
-    // static int frameCounter = 0;
-    // if (++frameCounter >= 10) {
-    //     updateInterferenceGraph();
-    //     frameCounter = 0;
+    // ✅ RÉACTIVÉ avec optimisation: Update interference graph toutes les 10 frames
+    // Pour 2000 véhicules @ 30 FPS = update toutes les ~333ms (acceptable)
+    if (m_v2vEnabled) {
+        static int frameCounter = 0;
+        if (++frameCounter >= 10) {
+            updateInterferenceGraph();
+            frameCounter = 0;
+        }
+        
+        // Update V2V communication
+        updateV2VCommunication();
+    }
     // }
     
     // Calculate FPS
@@ -300,10 +315,6 @@ void SimulationEngine::updateVehiclePositions(double deltaTime) {
     }
 }
 
-void SimulationEngine::updateInterferenceGraph() {
-    m_interferenceGraph->update(m_vehicles);
-}
-
 void SimulationEngine::generatePathsProgressively() {
     // Génère des chemins pour quelques véhicules à chaque frame
     // pour éviter de bloquer l'UI
@@ -377,6 +388,61 @@ void SimulationEngine::calculateFPS() {
         m_frameCount = 0;
         m_lastFPSUpdate = currentTime;
         emit fpsChanged(m_currentFPS);
+    }
+}
+
+void SimulationEngine::updateInterferenceGraph() {
+    if (!m_interferenceGraph) return;
+    
+    // Update avec tous les véhicules actifs
+    m_interferenceGraph->update(m_vehicles);
+    
+    // Mettre à jour les voisins de chaque véhicule
+    for (auto& vehicle : m_vehicles) {
+        if (!vehicle->isActive()) continue;
+        
+        auto neighbors = m_interferenceGraph->getNeighbors(vehicle->getId());
+        vehicle->setNeighbors(neighbors);
+    }
+}
+
+void SimulationEngine::updateV2VCommunication() {
+    if (!m_v2vManager) return;
+    
+    // Update du gestionnaire (traitement messages en attente)
+    m_v2vManager->update(m_simulationTime);
+    
+    // Envoyer des messages CAM périodiquement
+    double camInterval = 1.0 / m_camFrequency;  // ex: 5 Hz = 0.2s
+    if (m_simulationTime - m_lastCAMTime >= camInterval) {
+        m_lastCAMTime = m_simulationTime;
+        
+        // Chaque véhicule envoie un CAM à ses voisins
+        for (const auto& vehicle : m_vehicles) {
+            if (!vehicle->isActive()) continue;
+            
+            // Créer message CAM
+            auto cam = std::make_shared<communication::CAM>(
+                vehicle->getId(),
+                vehicle->getPosition(),
+                vehicle->getSpeed(),
+                vehicle->getDirection(),
+                vehicle->getAcceleration()
+            );
+            
+            // Broadcast aux voisins (direct uniquement, maxHops=0)
+            m_v2vManager->broadcastMessage(cam, 0);
+        }
+    }
+    
+    // TODO: Traiter les messages reçus par chaque véhicule
+    // Pour l'instant, on les collecte juste pour les statistiques
+    for (const auto& vehicle : m_vehicles) {
+        if (!vehicle->isActive()) continue;
+        
+        auto messages = m_v2vManager->getReceivedMessages(vehicle->getId());
+        // Les véhicules pourraient réagir aux messages ici
+        // Ex: freinage si DENM reçu, ajuster vitesse selon CAM voisins, etc.
     }
 }
 

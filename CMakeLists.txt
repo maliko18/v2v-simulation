@@ -166,6 +166,11 @@ set(NETWORK_SOURCES
     src/network/InterferenceGraph.cpp
     src/network/SpatialIndex.cpp
     src/network/PathPlanner.cpp
+    src/network/PathCache.cpp
+)
+
+set(COMMUNICATION_SOURCES
+    src/communication/V2VCommunicationManager.cpp
 )
 
 set(VISUALIZATION_SOURCES
@@ -192,6 +197,7 @@ set(ALL_SOURCES
     src/main.cpp
     ${CORE_SOURCES}
     ${NETWORK_SOURCES}
+    ${COMMUNICATION_SOURCES}
     ${VISUALIZATION_SOURCES}
     ${DATA_SOURCES}
     ${UTILS_SOURCES}
@@ -212,6 +218,12 @@ set(NETWORK_HEADERS
     include/network/InterferenceGraph.hpp
     include/network/SpatialIndex.hpp
     include/network/PathPlanner.hpp
+    include/network/PathCache.hpp
+)
+
+set(COMMUNICATION_HEADERS
+    include/communication/V2VMessage.hpp
+    include/communication/V2VCommunicationManager.hpp
 )
 
 set(VISUALIZATION_HEADERS
@@ -237,6 +249,7 @@ set(UTILS_HEADERS
 set(ALL_HEADERS
     ${CORE_HEADERS}
     ${NETWORK_HEADERS}
+    ${COMMUNICATION_HEADERS}
     ${VISUALIZATION_HEADERS}
     ${DATA_HEADERS}
     ${UTILS_HEADERS}
