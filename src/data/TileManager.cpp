@@ -224,7 +224,13 @@ void TileManager::clearMemoryCache() {
 
 void TileManager::clearAll() {
     clearMemoryCache();
-    // TODO: Supprimer les fichiers du cache disque
+    
+    // Supprimer les fichiers du cache disque
+    QDir cacheDir(m_cacheDir);
+    if (cacheDir.exists()) {
+        cacheDir.removeRecursively();
+        LOG_INFO(QString("Disk cache cleared: %1").arg(m_cacheDir));
+    }
 }
 
 } // namespace data
