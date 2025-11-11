@@ -1,7 +1,9 @@
 #include "network/InterferenceGraph.hpp"
 #include "core/Vehicle.hpp"
+#include "data/GeometryUtils.hpp"
 #include "utils/Logger.hpp"
 #include "utils/Profiler.hpp"
+#include <algorithm>
 
 namespace v2v {
 namespace network {
@@ -36,14 +38,45 @@ void InterferenceGraph::update(const std::vector<std::shared_ptr<core::Vehicle>>
     rebuildRTree();
     
     // Find connections
+    // Two vehicles connect if one vehicle's position is inside the other's transmission radius
+    // This means: distance <= min(radius1, radius2) OR we check both directions
+    // For V2V: both vehicles must be able to reach each other, so distance <= min(radius1, radius2)
     for (const auto& vehicle : vehicles) {
         if (!vehicle->isActive()) continue;
         
         int id = vehicle->getId();
-        double radius = vehicle->getTransmissionRadius();
+        double radius1 = vehicle->getTransmissionRadius(); // in meters
         
-        auto neighbors = queryNeighbors(id, radius);
-        m_connections[id] = std::unordered_set<int>(neighbors.begin(), neighbors.end());
+        // Query neighbors with search radius (in degrees, approximate)
+        // Convert meters to degrees for search: 1 degree ≈ 111320 meters
+        const double metersPerDegree = 111320.0;
+        double searchRadiusDegrees = radius1 / metersPerDegree;
+        
+        auto candidates = queryNeighbors(id, searchRadiusDegrees);
+        
+        std::unordered_set<int> connectedNeighbors;
+        for (int candidateId : candidates) {
+            // Find the candidate vehicle to get its radius
+            auto candidateIt = std::find_if(vehicles.begin(), vehicles.end(),
+                [candidateId](const auto& v) { return v->getId() == candidateId && v->isActive(); });
+            
+            if (candidateIt == vehicles.end()) continue;
+            
+            const auto& candidateVehicle = *candidateIt;
+            double radius2 = candidateVehicle->getTransmissionRadius(); // in meters
+            
+            // Calculate actual distance in meters using Haversine
+            double distMeters = distanceInMeters(id, candidateId);
+            
+            // Connect if the distance is within BOTH vehicles' radii
+            // This means both vehicles can reach each other (bidirectional communication)
+            // Vehicle B is inside Vehicle A's radius AND Vehicle A is inside Vehicle B's radius
+            if (distMeters <= radius1 && distMeters <= radius2) {
+                connectedNeighbors.insert(candidateId);
+            }
+        }
+        
+        m_connections[id] = connectedNeighbors;
     }
 }
 
@@ -143,6 +176,24 @@ double InterferenceGraph::distance(int vehicleId1, int vehicleId2) const {
     }
     
     return bg::distance(pos1->second, pos2->second);
+}
+
+double InterferenceGraph::distanceInMeters(int vehicleId1, int vehicleId2) const {
+    auto pos1 = m_vehiclePositions.find(vehicleId1);
+    auto pos2 = m_vehiclePositions.find(vehicleId2);
+    
+    if (pos1 == m_vehiclePositions.end() || pos2 == m_vehiclePositions.end()) {
+        return std::numeric_limits<double>::max();
+    }
+    
+    // Convert Point2D (x=lon, y=lat) to lat/lon for Haversine
+    double lat1 = pos1->second.get<1>();
+    double lon1 = pos1->second.get<0>();
+    double lat2 = pos2->second.get<1>();
+    double lon2 = pos2->second.get<0>();
+    
+    // Use Haversine distance for accurate meters calculation
+    return data::GeometryUtils::haversineDistance(lat1, lon1, lat2, lon2);
 }
 
 } // namespace network
