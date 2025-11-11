@@ -10,11 +10,6 @@ RoadGraph::RoadGraph() {
     LOG_INFO("RoadGraph created");
 }
 
-void RoadGraph::loadFromOSM(const std::string& osmFile) {
-    // Cette fonction est maintenant appelée via OSMParser
-    LOG_INFO(QString("Loading OSM file: %1").arg(QString::fromStdString(osmFile)));
-}
-
 void RoadGraph::clear() {
     m_graph.clear();
     m_spatialIndex.clear();
@@ -74,14 +69,6 @@ VertexDescriptor RoadGraph::getNearestNode(double lat, double lon) const {
     }
     
     return nearest;
-}
-
-std::vector<VertexDescriptor> RoadGraph::getPath(VertexDescriptor start, VertexDescriptor end) {
-    // TODO: Implement Dijkstra/A* (sera fait dans PathPlanner)
-    std::vector<VertexDescriptor> path;
-    path.push_back(start);
-    path.push_back(end);
-    return path;
 }
 
 size_t RoadGraph::getNodeCount() const {
