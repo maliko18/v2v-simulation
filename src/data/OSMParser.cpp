@@ -15,19 +15,10 @@ namespace data {
 
 class OSMParser::Impl {
 public:
-    double minLat = -90.0, minLon = -180.0, maxLat = 90.0, maxLon = 180.0;
-    std::set<std::string> roadTypes;
-    bool useBoundingBox = false;
+    // Classe vide pour l'instant (pour extension future)
 };
 
 OSMParser::OSMParser() : m_impl(std::make_unique<Impl>()) {
-    // Types de routes par défaut (routes carrossables)
-    m_impl->roadTypes = {
-        "motorway", "trunk", "primary", "secondary", "tertiary",
-        "residential", "living_street", "unclassified",
-        "motorway_link", "trunk_link", "primary_link", 
-        "secondary_link", "tertiary_link"
-    };
 }
 
 OSMParser::~OSMParser() = default;
@@ -252,18 +243,6 @@ double OSMParser::calculateDistance(double lat1, double lon1, double lat2, doubl
                std::sin(dLon/2) * std::sin(dLon/2);
     double c = 2 * std::atan2(std::sqrt(a), std::sqrt(1-a));
     return R * c;
-}
-
-void OSMParser::setBoundingBox(double minLat, double minLon, double maxLat, double maxLon) {
-    m_impl->minLat = minLat;
-    m_impl->minLon = minLon;
-    m_impl->maxLat = maxLat;
-    m_impl->maxLon = maxLon;
-    m_impl->useBoundingBox = true;
-}
-
-void OSMParser::setRoadTypes(const std::vector<std::string>& types) {
-    m_impl->roadTypes = std::set<std::string>(types.begin(), types.end());
 }
 
 } // namespace data

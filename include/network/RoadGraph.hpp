@@ -58,7 +58,6 @@ public:
     ~RoadGraph() = default;
 
     // Construction du graphe
-    void loadFromOSM(const std::string& osmFile);
     void clear();
     
     // Ajout de nœuds/arêtes
@@ -68,7 +67,6 @@ public:
     
     // Requêtes
     VertexDescriptor getNearestNode(double lat, double lon) const;
-    std::vector<VertexDescriptor> getPath(VertexDescriptor start, VertexDescriptor end);
     
     // Statistiques
     size_t getNodeCount() const;

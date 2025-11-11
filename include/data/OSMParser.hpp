@@ -28,16 +28,6 @@ public:
      * @return true si succès
      */
     bool loadFile(const std::string& filename, network::RoadGraph* roadGraph);
-    
-    /**
-     * @brief Filtrer par bounding box
-     */
-    void setBoundingBox(double minLat, double minLon, double maxLat, double maxLon);
-    
-    /**
-     * @brief Types de routes à inclure
-     */
-    void setRoadTypes(const std::vector<std::string>& types);
 
 private:
     class Impl;
