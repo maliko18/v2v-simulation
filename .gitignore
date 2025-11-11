@@ -1,0 +1,68 @@
+# CMake
+build/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps
+
+# CLion / JetBrains
+.idea/
+*.iml
+*.iws
+.cmake/
+
+# Build artifacts
+*.o
+*.so
+*.a
+*.exe
+v2v_simulator
+moc_*
+ui_*
+qrc_*
+
+# Qt
+*.autosave
+*.qmlc
+*.jsc
+
+# Logs
+*.log
+v2v_simulator.log
+
+# Data files (OSM)
+data/osm/*.osm
+data/osm/*.osm.pbf
+data/cache/*
+
+# Temporary files
+*~
+*.swp
+*.swo
+.DS_Store
+*.bak
+
+# Visual Studio Code
+.vscode/
+
+# GDB
+.gdb_history
+
+# Valgrind
+*.valgrind
+vgcore.*
+
+# ccache
+.ccache/
+
+# Packages
+*.tar.gz
+*.zip
+data/alsace.osm

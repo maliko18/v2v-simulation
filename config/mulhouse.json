@@ -1,0 +1,38 @@
+{
+  "zone": {
+    "name": "Mulhouse",
+    "bbox": {
+      "north": 47.7800,
+      "south": 47.7200,
+      "east": 7.3800,
+      "west": 7.3000
+    },
+    "center": {
+      "lat": 47.7508,
+      "lon": 7.3359
+    }
+  },
+  "osm": {
+    "extract_url": "http://download.geofabrik.de/europe/france/alsace-latest.osm.pbf",
+    "road_types": ["motorway", "trunk", "primary", "secondary", "tertiary", "residential"],
+    "max_nodes": 20000
+  },
+  "simulation": {
+    "initial_vehicles": 2000,
+    "spawn_distribution": "realistic",
+    "time_acceleration": 1.0,
+    "target_fps": 60
+  },
+  "v2v": {
+    "transmission_radius_m": 300,
+    "update_interval_ms": 50,
+    "max_connections_per_vehicle": 50
+  },
+  "rendering": {
+    "vsync": false,
+    "antialiasing": true,
+    "tile_cache_size_mb": 500,
+    "culling": true,
+    "lod_enabled": true
+  }
+}
