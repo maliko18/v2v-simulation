@@ -83,7 +83,6 @@ private:
     void updateVehiclePositions(double deltaTime);
     void updateInterferenceGraph();
     void calculateFPS();
-    void generatePathsProgressively();  // Nouvelle méthode pour génération progressive
     
     State m_state;
     QTimer* m_updateTimer;
@@ -101,10 +100,6 @@ private:
     qint64 m_lastUpdateTime;
     int m_frameCount;
     qint64 m_lastFPSUpdate;
-    
-    // Génération progressive des chemins
-    size_t m_nextVehicleToGeneratePath;
-    size_t m_maxVehiclesWithPaths;
 };
 
 } // namespace core

@@ -93,7 +93,7 @@ find_package(Boost 1.74 REQUIRED COMPONENTS
 message(STATUS "Boost found: ${Boost_VERSION}")
 
 # ============================================================================
-# Find libosmium
+# Find libosmium (Optional - not currently used, but may be needed in future)
 # ============================================================================
 
 find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp
@@ -103,7 +103,8 @@ find_path(OSMIUM_INCLUDE_DIR osmium/osm.hpp
 if(OSMIUM_INCLUDE_DIR)
     message(STATUS "libosmium found: ${OSMIUM_INCLUDE_DIR}")
 else()
-    message(FATAL_ERROR "libosmium not found! Install: sudo apt install libosmium2-dev")
+    message(WARNING "libosmium not found (optional - not currently used)")
+    set(OSMIUM_INCLUDE_DIR "")
 endif()
 
 # ============================================================================
@@ -146,10 +147,13 @@ find_package(OpenGL REQUIRED)
 
 include_directories(
     ${PROJECT_SOURCE_DIR}/include
-    ${OSMIUM_INCLUDE_DIR}
     ${Boost_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
 )
+
+if(OSMIUM_INCLUDE_DIR)
+    include_directories(${OSMIUM_INCLUDE_DIR})
+endif()
 
 # ============================================================================
 # Source Files
@@ -164,16 +168,12 @@ set(CORE_SOURCES
 set(NETWORK_SOURCES
     src/network/RoadGraph.cpp
     src/network/InterferenceGraph.cpp
-    src/network/SpatialIndex.cpp
     src/network/PathPlanner.cpp
 )
 
 set(VISUALIZATION_SOURCES
     src/visualization/MainWindow.cpp
     src/visualization/MapView.cpp
-    src/visualization/MapRenderer.cpp
-    src/visualization/VehicleRenderer.cpp
-    src/visualization/GraphOverlay.cpp
 )
 
 set(DATA_SOURCES
@@ -210,16 +210,12 @@ set(CORE_HEADERS
 set(NETWORK_HEADERS
     include/network/RoadGraph.hpp
     include/network/InterferenceGraph.hpp
-    include/network/SpatialIndex.hpp
     include/network/PathPlanner.hpp
 )
 
 set(VISUALIZATION_HEADERS
     include/visualization/MainWindow.hpp
     include/visualization/MapView.hpp
-    include/visualization/MapRenderer.hpp
-    include/visualization/VehicleRenderer.hpp
-    include/visualization/GraphOverlay.hpp
 )
 
 set(DATA_HEADERS

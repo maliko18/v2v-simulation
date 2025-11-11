@@ -1,9 +1,7 @@
 #include "visualization/MapView.hpp"
-#include "visualization/MapRenderer.hpp"
-#include "visualization/VehicleRenderer.hpp"
-#include "visualization/GraphOverlay.hpp"
 #include "core/SimulationEngine.hpp"
 #include "network/RoadGraph.hpp"
+#include "network/InterferenceGraph.hpp"
 #include "data/TileManager.hpp"
 #include "utils/Logger.hpp"
 #include <QPainter>
@@ -14,6 +12,7 @@
 #include <boost/graph/graph_traits.hpp>
 #include <cmath>
 #include <algorithm>
+#include <unordered_map>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -32,7 +31,7 @@ MapView::MapView(QWidget* parent)
     , m_scale(1.0)
     , m_isDragging(false)
     , m_showVehicles(true)
-    , m_showConnections(false)  // Désactivé par défaut pour meilleures performances
+    , m_showConnections(false)  // Désactivé par défaut pour performance (activer avec 'C')
     , m_showRoadGraph(false)
     , m_vsyncEnabled(false)
     , m_antialiasingEnabled(false)  // Désactivé par défaut pour meilleures performances
@@ -173,9 +172,65 @@ void MapView::paintEvent(QPaintEvent* event) {
             if (visibleVehicles.size() >= maxVisible) break;
         }
         
-        // Dessiner les zones de transmission en premier (si connexions activées)
-        // DÉSACTIVÉ avec beaucoup de véhicules pour performances
-        // if (m_showConnections && visibleVehicles.size() < 100) { ... }
+        // Créer une map pour lookup rapide: vehicleId -> screenPos
+        std::unordered_map<int, QPointF> vehicleIdToScreenPos;
+        for (const auto& [vehicle, screenPos] : visibleVehicles) {
+            vehicleIdToScreenPos[vehicle->getId()] = screenPos;
+        }
+        
+        // Dessiner les rayons de transmission (cercles autour des véhicules)
+        for (const auto& [vehicle, screenPos] : visibleVehicles) {
+            int radiusMeters = vehicle->getTransmissionRadius();
+            double radiusPixels = metersToPixels(radiusMeters, vehicle->getLatitude());
+            
+            // Dessiner le cercle de rayon avec une couleur semi-transparente
+            painter.setPen(QPen(QColor(100, 150, 255, 80), 1.5));  // Bleu clair semi-transparent
+            painter.setBrush(QColor(100, 150, 255, 30));  // Remplissage très transparent
+            painter.drawEllipse(screenPos, radiusPixels, radiusPixels);
+        }
+        
+        // Dessiner les connexions V2V (edges entre véhicules connectés)
+        // OPTIMISÉ: Limiter le nombre de connexions dessinées pour performance
+        if (m_showConnections && visibleVehicles.size() < 500) {  // Seulement si < 500 véhicules visibles
+            auto* interferenceGraph = m_engine->getInterferenceGraph();
+            if (interferenceGraph) {
+                // Limiter le nombre de connexions à dessiner (max 2000 pour performance)
+                const size_t maxConnectionsToDraw = 2000;
+                size_t connectionsDrawn = 0;
+                
+                // Dessiner les lignes de connexion (plus épaisses)
+                painter.setPen(QPen(QColor(0, 255, 0, 150), 2.0));  // Vert, ligne plus épaisse
+                
+                // Parcourir seulement les véhicules visibles pour éviter de traiter toutes les connexions
+                for (const auto& [vehicle1, screenPos1] : visibleVehicles) {
+                    if (connectionsDrawn >= maxConnectionsToDraw) break;
+                    
+                    int id1 = vehicle1->getId();
+                    auto neighbors = interferenceGraph->getNeighbors(id1);
+                    
+                    for (int id2 : neighbors) {
+                        if (connectionsDrawn >= maxConnectionsToDraw) break;
+                        
+                        // Éviter les doublons (ne dessiner que si id1 < id2)
+                        if (id1 >= id2) continue;
+                        
+                        auto it2 = vehicleIdToScreenPos.find(id2);
+                        if (it2 != vehicleIdToScreenPos.end()) {
+                            // Ne dessiner que si la distance à l'écran n'est pas trop grande
+                            QPointF screenPos2 = it2->second;
+                            double screenDist = std::sqrt(std::pow(screenPos1.x() - screenPos2.x(), 2) + 
+                                                         std::pow(screenPos1.y() - screenPos2.y(), 2));
+                            
+                            // Limiter la longueur des lignes dessinées (max 500 pixels)
+                            if (screenDist < 500.0) {
+                                painter.drawLine(screenPos1, screenPos2);
+                                connectionsDrawn++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         
         // Dessiner les véhicules ULTRA-SIMPLIFIÉ pour supporter 2000 véhicules
         painter.setPen(Qt::NoPen);
@@ -337,9 +392,6 @@ void MapView::paintEvent(QPaintEvent* event) {
     m_frameCount++;
 }
 
-void MapView::renderVehicles() {
-    // Cette fonction n'est plus utilisée, le rendu se fait dans paintEvent
-}
 
 void MapView::drawOSMTiles(QPainter& painter) {
     // Calculer quelles tuiles sont visibles
@@ -447,6 +499,29 @@ std::pair<double, double> MapView::screenToLatLon(const QPointF& screen) const {
     double lat = 180.0 / M_PI * std::atan(0.5 * (std::exp(n) - std::exp(-n)));
     
     return {lat, lon};
+}
+
+double MapView::metersToPixels(double meters, double latitude) const {
+    // Convertir des mètres en pixels à la latitude donnée
+    // À l'équateur: 1 degré de latitude ≈ 111,320 mètres
+    // La projection Web Mercator conserve les distances à l'équateur mais les étire aux pôles
+    
+    // Approximation: utiliser la latitude moyenne pour le calcul
+    // Plus précis: utiliser la latitude exacte du véhicule
+    const double metersPerDegreeLat = 111320.0;  // À l'équateur
+    const double metersPerDegreeLon = 111320.0 * std::cos(latitude * M_PI / 180.0);
+    
+    // Utiliser la moyenne pour un cercle approximatif
+    double avgMetersPerDegree = (metersPerDegreeLat + metersPerDegreeLon) / 2.0;
+    
+    // Convertir mètres en degrés
+    double degrees = meters / avgMetersPerDegree;
+    
+    // Convertir degrés en pixels selon le zoom
+    double zoom = std::pow(2.0, m_zoomLevel);
+    double pixelsPerDegree = 256.0 * zoom / 360.0;
+    
+    return degrees * pixelsPerDegree;
 }
 
 void MapView::mousePressEvent(QMouseEvent* event) {

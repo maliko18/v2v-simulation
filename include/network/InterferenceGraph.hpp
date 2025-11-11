@@ -102,9 +102,14 @@ private:
     std::vector<int> queryNeighbors(int vehicleId, double radius) const;
     
     /**
-     * @brief Calculer distance entre deux véhicules
+     * @brief Calculer distance entre deux véhicules (en degrés)
      */
     double distance(int vehicleId1, int vehicleId2) const;
+    
+    /**
+     * @brief Calculer distance en mètres entre deux véhicules (Haversine)
+     */
+    double distanceInMeters(int vehicleId1, int vehicleId2) const;
 };
 
 } // namespace network

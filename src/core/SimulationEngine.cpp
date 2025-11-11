@@ -24,8 +24,6 @@ SimulationEngine::SimulationEngine(QObject* parent)
     , m_lastUpdateTime(0)
     , m_frameCount(0)
     , m_lastFPSUpdate(0)
-    , m_nextVehicleToGeneratePath(0)
-    , m_maxVehiclesWithPaths(1000)
 {
     // Configure timer pour 30 FPS (meilleure performance)
     m_updateTimer->setInterval(1000 / m_targetFPS);
@@ -120,16 +118,13 @@ void SimulationEngine::updateSimulation() {
     // Update vehicles
     updateVehiclePositions(deltaTime);
     
-    // NE PLUS générer de chemins pendant la simulation (déplacé au démarrage)
-    // generatePathsProgressively();
-    
-    // DÉSACTIVÉ: Graphe d'interférence trop lourd avec 2000 véhicules (O(n²))
-    // Update interference graph toutes les 10 frames (constant, pas d'augmentation)
-    // static int frameCounter = 0;
-    // if (++frameCounter >= 10) {
-    //     updateInterferenceGraph();
-    //     frameCounter = 0;
-    // }
+    // Update interference graph (utilise R-tree donc O(n log n), pas O(n²))
+    // Mise à jour toutes les 10 frames pour performance (réduit la charge CPU)
+    static int frameCounter = 0;
+    if (++frameCounter >= 10) {
+        updateInterferenceGraph();
+        frameCounter = 0;
+    }
     
     // Calculate FPS
     calculateFPS();
@@ -190,9 +185,9 @@ void SimulationEngine::createVehicles(int count) {
     }
     
     LOG_INFO(QString("Creating %1 vehicles on road graph with %2 nodes and %3 edges")
-             .arg(count)
-             .arg(boost::num_vertices(graph))
-             .arg(boost::num_edges(graph)));
+            .arg(count)
+            .arg(boost::num_vertices(graph))
+            .arg(boost::num_edges(graph)));
     
     std::uniform_int_distribution<> node_dist(0, boost::num_vertices(graph) - 1);
     std::uniform_real_distribution<> speed_dist(10.0, 25.0); // 10-25 m/s (36-90 km/h)
@@ -210,7 +205,7 @@ void SimulationEngine::createVehicles(int count) {
                 std::chrono::steady_clock::now() - startTime).count();
             if (elapsed > maxTimeSeconds) {
                 LOG_WARNING(QString("Vehicle creation timeout after %1s, created %2/%3 vehicles")
-                           .arg(elapsed).arg(i).arg(count));
+                        .arg(elapsed).arg(i).arg(count));
                 break;
             }
         }
@@ -229,9 +224,9 @@ void SimulationEngine::createVehicles(int count) {
         // Log seulement les 10 premiers véhicules
         if (i < 10) {
             LOG_INFO(QString("Vehicle %1: start at (%2, %3)")
-                     .arg(i)
-                     .arg(startNode.latitude, 0, 'f', 6)
-                     .arg(startNode.longitude, 0, 'f', 6));
+                    .arg(i)
+                    .arg(startNode.latitude, 0, 'f', 6)
+                    .arg(startNode.longitude, 0, 'f', 6));
         }
         
         // Ajouter le véhicule maintenant (pathfinding sera fait après)
@@ -242,7 +237,7 @@ void SimulationEngine::createVehicles(int count) {
         // Afficher la progression tous les 50 véhicules
         if ((i + 1) % 50 == 0) {
             LOG_INFO(QString("Creating vehicles: %1/%2 (%3%)")
-                     .arg(i + 1).arg(count)
+                    .arg(i + 1).arg(count)
                      .arg((i + 1) * 100 / count));
         }
     }
@@ -274,9 +269,9 @@ void SimulationEngine::createVehicles(int count) {
             auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                 std::chrono::steady_clock::now() - pathStartTime).count();
             LOG_INFO(QString("Path generation: %1/%2 (%3%) - %4s elapsed")
-                     .arg(i + 1).arg(m_vehicles.size())
-                     .arg((i + 1) * 100 / m_vehicles.size())
-                     .arg(elapsed));
+                    .arg(i + 1).arg(m_vehicles.size())
+                    .arg((i + 1) * 100 / m_vehicles.size())
+                    .arg(elapsed));
         }
     }
     
@@ -284,14 +279,10 @@ void SimulationEngine::createVehicles(int count) {
     auto pathDuration = std::chrono::duration_cast<std::chrono::milliseconds>(pathEndTime - pathStartTime).count();
     
     LOG_INFO(QString("Path generation complete: %1 paths generated, %2 failed in %3ms (avg %4ms/path)")
-             .arg(pathsGenerated)
-             .arg(pathsFailed)
-             .arg(pathDuration)
-             .arg(pathsGenerated > 0 ? pathDuration / pathsGenerated : 0));
-    
-    // Marquer comme terminé
-    m_nextVehicleToGeneratePath = m_vehicles.size();
-    m_maxVehiclesWithPaths = pathsGenerated;
+            .arg(pathsGenerated)
+            .arg(pathsFailed)
+            .arg(pathDuration)
+            .arg(pathsGenerated > 0 ? pathDuration / pathsGenerated : 0));
 }
 
 void SimulationEngine::updateVehiclePositions(double deltaTime) {
@@ -302,69 +293,6 @@ void SimulationEngine::updateVehiclePositions(double deltaTime) {
 
 void SimulationEngine::updateInterferenceGraph() {
     m_interferenceGraph->update(m_vehicles);
-}
-
-void SimulationEngine::generatePathsProgressively() {
-    // Génère des chemins pour quelques véhicules à chaque frame
-    // pour éviter de bloquer l'UI
-    if (!m_pathPlanner || m_nextVehicleToGeneratePath >= m_maxVehiclesWithPaths) {
-        return;  // Déjà terminé
-    }
-    
-    // IMPORTANT : Attendre 1 seconde seulement pour démarrer rapidement
-    if (m_simulationTime < 1.0) {
-        return;  // Attendre que la simulation soit stable
-    }
-    
-    // Générer BEAUCOUP de chemins par frame - adaptatif selon le nombre de véhicules
-    int pathsPerFrame = 20;  // Base : 20 chemins/frame
-    if (m_vehicles.size() > 500) {
-        pathsPerFrame = 50;  // Si >500 véhicules : 50 chemins/frame
-    }
-    if (m_vehicles.size() > 1000) {
-        pathsPerFrame = 100;  // Si >1000 véhicules : 100 chemins/frame
-    }
-    if (m_vehicles.size() > 1500) {
-        pathsPerFrame = 150;  // Si >1500 véhicules : 150 chemins/frame
-    }
-    
-    int generated = 0;
-    
-    while (m_nextVehicleToGeneratePath < m_maxVehiclesWithPaths && 
-           generated < pathsPerFrame &&
-           m_nextVehicleToGeneratePath < m_vehicles.size()) {
-        
-        auto& vehicle = m_vehicles[m_nextVehicleToGeneratePath];
-        
-        // Vérifier si le véhicule n'a pas déjà un chemin
-        if (!vehicle->hasPath()) {
-            QPointF startPos(vehicle->getLongitude(), vehicle->getLatitude());
-            // Distance adaptée pour Mulhouse (500m donne des trajets intéressants)
-            auto path = m_pathPlanner->generateRandomPath(startPos, 500.0);
-            if (!path.empty()) {
-                vehicle->setPath(path);
-            }
-        }
-        
-        m_nextVehicleToGeneratePath++;
-        generated++;
-    }
-    
-    // Log progression tous les 100 véhicules
-    static size_t lastLogged = 0;
-    if (m_nextVehicleToGeneratePath / 100 > lastLogged) {
-        lastLogged = m_nextVehicleToGeneratePath / 100;
-        LOG_INFO(QString("Path generation progress: %1/%2 (%3%)")
-                 .arg(m_nextVehicleToGeneratePath)
-                 .arg(m_maxVehiclesWithPaths)
-                 .arg(m_nextVehicleToGeneratePath * 100 / m_maxVehiclesWithPaths));
-    }
-    
-    // Log final
-    if (m_nextVehicleToGeneratePath >= m_maxVehiclesWithPaths) {
-        LOG_INFO(QString("Path generation complete: %1 vehicles have paths")
-                 .arg(m_maxVehiclesWithPaths));
-    }
 }
 
 void SimulationEngine::calculateFPS() {

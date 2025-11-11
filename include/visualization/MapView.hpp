@@ -14,11 +14,6 @@ namespace v2v {
 // Forward declarations
 namespace core { class SimulationEngine; }
 namespace data { class TileManager; }
-namespace visualization { 
-    class MapRenderer; 
-    class VehicleRenderer;
-    class GraphOverlay;
-}
 
 namespace visualization {
 
@@ -73,23 +68,18 @@ private slots:
 
 private:
     void drawOSMTiles(QPainter& painter);
-    void renderVehicles();
     void renderConnections();
     void renderUI();
     
     // Transformation coordonnées
     QPointF latLonToScreen(double lat, double lon) const;
     std::pair<double, double> screenToLatLon(const QPointF& screen) const;
+    double metersToPixels(double meters, double latitude) const;
     
     core::SimulationEngine* m_engine;
     
     // OSM Tiles
     std::unique_ptr<data::TileManager> m_tileManager;
-    
-    // Renderers
-    std::unique_ptr<MapRenderer> m_mapRenderer;
-    std::unique_ptr<VehicleRenderer> m_vehicleRenderer;
-    std::unique_ptr<GraphOverlay> m_graphOverlay;
     
     // Vue
     double m_centerLat;
