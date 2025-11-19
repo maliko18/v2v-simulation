@@ -181,13 +181,10 @@ void MainWindow::createToolbar() {
 }
 
 void MainWindow::createStatusBar() {
-    m_statusFPS = new QLabel("FPS: 0", this);
     m_statusVehicles = new QLabel("Vehicles: 0", this);
     m_statusConnections = new QLabel("Connections: 0", this);
     m_statusSimTime = new QLabel("Time: 0.0s", this);
     
-    statusBar()->addWidget(m_statusFPS);
-    statusBar()->addWidget(new QLabel(" | ", this));
     statusBar()->addWidget(m_statusVehicles);
     statusBar()->addWidget(new QLabel(" | ", this));
     statusBar()->addWidget(m_statusConnections);
@@ -213,9 +210,6 @@ void MainWindow::connectSignals() {
     connect(m_transmissionRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &MainWindow::onTransmissionRadiusChanged);
     
-    // Engine signals
-    connect(m_engine, &core::SimulationEngine::fpsChanged,
-            [this](int fps) { m_statusFPS->setText(QString("FPS: %1").arg(fps)); });
     // Repaint map view on each simulation tick so vehicles update smoothly
     connect(m_engine, &core::SimulationEngine::tick, m_mapView, qOverload<>(&QWidget::update));
 }

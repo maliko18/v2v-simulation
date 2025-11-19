@@ -76,7 +76,6 @@ private:
     QSpinBox* m_transmissionRadiusSpinBox;
     
     // Status bar widgets
-    QLabel* m_statusFPS;
     QLabel* m_statusVehicles;
     QLabel* m_statusConnections;
     QLabel* m_statusSimTime;

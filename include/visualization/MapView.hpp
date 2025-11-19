@@ -99,10 +99,6 @@ private:
     bool m_showTransmissionRadius;  // Afficher les cercles bleus de transmission
     bool m_vsyncEnabled;
     bool m_antialiasingEnabled;
-    
-    // Performance
-    int m_frameCount;
-    qint64 m_lastFPSTime;
 };
 
 } // namespace visualization

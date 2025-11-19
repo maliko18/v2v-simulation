@@ -36,8 +36,6 @@ MapView::MapView(QWidget* parent)
     , m_showTransmissionRadius(true)  // Cercles bleus activés par défaut (toggle avec 'T')
     , m_vsyncEnabled(false)
     , m_antialiasingEnabled(false)  // Désactivé par défaut pour meilleures performances
-    , m_frameCount(0)
-    , m_lastFPSTime(0)
 {
     // Configuration du widget pour performance optimale
     setMinimumSize(800, 600);
@@ -374,25 +372,6 @@ void MapView::paintEvent(QPaintEvent* event) {
         painter.setFont(QFont("Arial", 11, QFont::Bold));
         painter.drawText(width() - 145, 25, QString("🚗 %1 véhicules").arg(vehicleCount));
     }
-    
-    // FPS counter (calcul toutes les secondes)
-    qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-    if (currentTime - m_lastFPSTime >= 1000) {
-        double fps = m_frameCount * 1000.0 / (currentTime - m_lastFPSTime);
-        m_lastFPSTime = currentTime;
-        m_frameCount = 0;
-        
-        // Afficher FPS dans le coin
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 0, 0, 150));
-        painter.drawRoundedRect(width() - 90, height() - 35, 85, 30, 5, 5);
-        
-        painter.setPen(fps >= 55 ? QColor(0, 255, 0) : (fps >= 30 ? QColor(255, 165, 0) : QColor(255, 0, 0)));
-        painter.setFont(QFont("Arial", 10, QFont::Bold));
-        painter.drawText(width() - 80, height() - 13, QString("FPS: %1").arg(static_cast<int>(fps)));
-    }
-    
-    m_frameCount++;
 }
 
 
