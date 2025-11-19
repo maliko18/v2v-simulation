@@ -84,13 +84,6 @@ void MainWindow::createUI() {
                               "QPushButton:disabled { background-color: #555; color: #888; }");
     leftLayout->addWidget(m_btnPause);
     
-    m_btnStop = new QPushButton("⏹ Stop", leftPanel);
-    m_btnStop->setEnabled(false);
-    m_btnStop->setStyleSheet("QPushButton { background-color: #f44336; color: white; padding: 8px; border-radius: 5px; }"
-                            "QPushButton:hover { background-color: #da190b; }"
-                            "QPushButton:disabled { background-color: #555; color: #888; }");
-    leftLayout->addWidget(m_btnStop);
-    
     m_btnReset = new QPushButton("↻ Reset", leftPanel);
     m_btnReset->setStyleSheet("QPushButton { background-color: #607D8B; color: white; padding: 8px; border-radius: 5px; }"
                              "QPushButton:hover { background-color: #546E7A; }");
@@ -206,16 +199,12 @@ void MainWindow::createMenuBar() {
     QMenu* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction("&Load OSM...", this, &MainWindow::onLoadOSMFile);
     fileMenu->addSeparator();
-    fileMenu->addAction("&Save Config", this, &MainWindow::onSaveConfiguration);
-    fileMenu->addAction("&Load Config", this, &MainWindow::onLoadConfiguration);
-    fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
 }
 
 void MainWindow::connectSignals() {
     connect(m_btnStart, &QPushButton::clicked, this, &MainWindow::onStartSimulation);
     connect(m_btnPause, &QPushButton::clicked, this, &MainWindow::onPauseSimulation);
-    connect(m_btnStop, &QPushButton::clicked, this, &MainWindow::onStopSimulation);
     connect(m_btnReset, &QPushButton::clicked, this, &MainWindow::onResetSimulation);
     
     connect(m_timeScaleSlider, &QSlider::valueChanged, this, &MainWindow::onTimeScaleChanged);
@@ -251,13 +240,6 @@ void MainWindow::onPauseSimulation() {
     updateControls();
 }
 
-void MainWindow::onStopSimulation() {
-    LOG_INFO("Stopping simulation");
-    m_engine->stop();
-    m_isSimulationRunning = false;
-    updateControls();
-}
-
 void MainWindow::onResetSimulation() {
     LOG_INFO("Resetting simulation");
     m_engine->reset();
@@ -282,21 +264,16 @@ void MainWindow::onTransmissionRadiusChanged(int value) {
     LOG_INFO(QString("Transmission radius set to: %1m").arg(value));
 }
 
-void MainWindow::updateStatusBar() {
-    // TODO: Update with real data
-}
-
 void MainWindow::updateControls() {
     m_btnStart->setEnabled(!m_isSimulationRunning);
     m_btnPause->setEnabled(m_isSimulationRunning);
-    m_btnStop->setEnabled(m_isSimulationRunning);
 }
 
 void MainWindow::onLoadOSMFile() {
     QString filename = QFileDialog::getOpenFileName(
         this,
         "Load OSM File",
-        "../data/osm",
+        "../data",
         "OSM Files (*.osm *.osm.pbf);;All Files (*)"
     );
     
@@ -305,9 +282,6 @@ void MainWindow::onLoadOSMFile() {
         
         // Utiliser OSMParser pour charger le fichier
         v2v::data::OSMParser parser;
-        
-        // Filtrer par bounding box de Mulhouse (optionnel)
-        // parser.setBoundingBox(47.7, 7.2, 47.8, 7.4);
         
         auto* roadGraph = m_engine->getRoadGraph();
         if (parser.loadFile(filename.toStdString(), roadGraph)) {
@@ -342,16 +316,6 @@ void MainWindow::onLoadOSMFile() {
             );
         }
     }
-}
-
-void MainWindow::onSaveConfiguration() {
-    LOG_INFO("Saving configuration");
-    // TODO: Save to JSON
-}
-
-void MainWindow::onLoadConfiguration() {
-    LOG_INFO("Loading configuration");
-    // TODO: Load from JSON
 }
 
 void MainWindow::loadSettings() {

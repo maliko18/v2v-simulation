@@ -33,6 +33,7 @@ MapView::MapView(QWidget* parent)
     , m_showVehicles(true)
     , m_showConnections(false)  // Désactivé par défaut pour performance (activer avec 'C')
     , m_showRoadGraph(false)
+    , m_showTransmissionRadius(true)  // Cercles bleus activés par défaut (toggle avec 'T')
     , m_vsyncEnabled(false)
     , m_antialiasingEnabled(false)  // Désactivé par défaut pour meilleures performances
     , m_frameCount(0)
@@ -179,14 +180,16 @@ void MapView::paintEvent(QPaintEvent* event) {
         }
         
         // Dessiner les rayons de transmission (cercles autour des véhicules)
-        for (const auto& [vehicle, screenPos] : visibleVehicles) {
-            int radiusMeters = vehicle->getTransmissionRadius();
-            double radiusPixels = metersToPixels(radiusMeters, vehicle->getLatitude());
-            
-            // Dessiner le cercle de rayon avec une couleur semi-transparente
-            painter.setPen(QPen(QColor(100, 150, 255, 80), 1.5));  // Bleu clair semi-transparent
-            painter.setBrush(QColor(100, 150, 255, 30));  // Remplissage très transparent
-            painter.drawEllipse(screenPos, radiusPixels, radiusPixels);
+        if (m_showTransmissionRadius) {
+            for (const auto& [vehicle, screenPos] : visibleVehicles) {
+                int radiusMeters = vehicle->getTransmissionRadius();
+                double radiusPixels = metersToPixels(radiusMeters, vehicle->getLatitude());
+                
+                // Dessiner le cercle de rayon avec une couleur semi-transparente
+                painter.setPen(QPen(QColor(100, 150, 255, 80), 1.5));  // Bleu clair semi-transparent
+                painter.setBrush(QColor(100, 150, 255, 30));  // Remplissage très transparent
+                painter.drawEllipse(screenPos, radiusPixels, radiusPixels);
+            }
         }
         
         // Dessiner les connexions V2V (edges entre véhicules connectés)
@@ -660,6 +663,14 @@ void MapView::keyPressEvent(QKeyEvent* event) {
         // Toggle affichage graphe routier avec 'R'
         case Qt::Key_R:
             setShowRoadGraph(!m_showRoadGraph);
+            needsUpdate = true;
+            break;
+            
+        // Toggle cercles de transmission avec 'T'
+        case Qt::Key_T:
+            m_showTransmissionRadius = !m_showTransmissionRadius;
+            LOG_INFO(m_showTransmissionRadius ? 
+                "Transmission radius circles: ON" : "Transmission radius circles: OFF");
             needsUpdate = true;
             break;
             

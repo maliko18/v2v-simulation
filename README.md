@@ -29,11 +29,12 @@ Ce projet implémente un simulateur haute performance pour visualiser et analyse
 
 ### Caractéristiques Principales
 
-✅ **2000+ véhicules simulés** à 60 FPS  
+✅ **2000+ véhicules simulés** à 30 FPS  
 ✅ **Visualisation interactive** avec zoom/pan  
 ✅ **Graphe d'interférences dynamique** (V2V)  
-✅ **Données réelles OSM** (Mulhouse)  
+✅ **Données réelles OSM** (Mulhouse, Alsace)  
 ✅ **Architecture optimisée** pour haute performance  
+✅ **Tuiles OSM en temps réel** (OpenStreetMap)
 
 ---
 
@@ -42,27 +43,25 @@ Ce projet implémente un simulateur haute performance pour visualiser et analyse
 ```
 v2v-simulator/
 ├── include/          # Headers (.hpp)
-│   ├── core/         # Moteur simulation
-│   ├── network/      # Graphes (routier + V2V)
-│   ├── visualization/# Interface Qt + OpenGL
-│   ├── data/         # OSM parsing, tuiles
-│   └── utils/        # Logger, Config, Profiler
+│   ├── core/         # Vehicle, SimulationEngine
+│   ├── network/      # RoadGraph, InterferenceGraph, PathPlanner
+│   ├── visualization/# MainWindow, MapView
+│   ├── data/         # OSMParser, TileManager, GeometryUtils
+│   └── utils/        # Logger
 ├── src/              # Implémentations (.cpp)
-├── config/           # Configuration JSON
-├── data/             # Données OSM
-├── resources/        # Shaders, icônes
-└── CMakeLists.txt    # Build configuration
+├── data/             # Données OSM (Mulhouse, Alsace)
+└── CMakeLists.txt    # Configuration build
 ```
 
 ### Modules Principaux
 
-| Module | Description | Technologies |
-|--------|-------------|--------------|
-| **Core** | `Vehicle`, `SimulationEngine`, `TimeController` | Qt, C++20 |
-| **Network** | `RoadGraph`, `InterferenceGraph`, `SpatialIndex` | Boost.Graph, R-tree |
-| **Visualization** | `MainWindow`, `MapView`, Renderers | Qt6, OpenGL 4.3 |
-| **Data** | `OSMParser`, `TileManager`, `GeometryUtils` | libosmium, SQLite |
-| **Utils** | `Logger`, `Profiler`, `Config` | Qt, JSON |
+| Module            | Description                                     | Technologies            |
+| ----------------- | ----------------------------------------------- | ----------------------- |
+| **Core**          | `Vehicle`, `SimulationEngine`                   | Qt, C++20               |
+| **Network**       | `RoadGraph`, `InterferenceGraph`, `PathPlanner` | Boost.Graph, R-tree     |
+| **Visualization** | `MainWindow`, `MapView`                         | Qt6, QPainter           |
+| **Data**          | `OSMParser`, `TileManager`, `GeometryUtils`     | libosmium, CURL, SQLite |
+| **Utils**         | `Logger`                                        | Qt                      |
 
 ---
 
@@ -116,12 +115,10 @@ Toutes les dépendances sont déjà installées ✅
 
 ### 2. Télécharger Données OSM (Optionnel)
 
-```bash
-cd v2v-simulator
-./scripts/download_osm.sh
-```
+Les données OSM pour Mulhouse et l'Alsace sont déjà incluses dans le dossier `data/`:
 
-Ce script télécharge automatiquement l'extract Mulhouse depuis Geofabrik.
+- `data/mulhouse.osm` - Zone urbaine de Mulhouse
+- `data/alsace_main_roads.osm` - Routes principales d'Alsace
 
 ---
 
@@ -158,7 +155,6 @@ ninja
 
 - **Debug:** Pour développement avec débogueur
   - Flags: `-O0 -g -Wall -Wextra`
-  
 - **Release:** Pour performance maximale ⚡
   - Flags: `-O3 -march=native -mtune=native -flto -DNDEBUG`
 
@@ -173,6 +169,7 @@ ninja
 #### Run Configuration
 
 Dans CLion:
+
 1. **Run → Edit Configurations**
 2. Ajouter **CMake Application**
 3. **Target:** `v2v_simulator`
@@ -186,7 +183,7 @@ Dans CLion:
 
 ```
 ┌────────────────────────────────────────────┐
-│ [▶ Start] [⏸ Pause] [⏹ Stop] [↻ Reset]  │ Toolbar
+│ [▶ Start] [⏸ Pause] [↻ Reset]            │ Contrôles
 │ Speed: [████──────] 1.0x                   │
 │ Vehicles: [2000▼] Radius: [300m▼]         │
 ├────────────────────────────────────────────┤
@@ -194,48 +191,47 @@ Dans CLion:
 │          Carte Interactive (MapView)       │
 │          - Zoom: Molette souris           │
 │          - Pan: Drag souris               │
-│          - Véhicules: Points bleus        │
+│          - Véhicules: Points rouges       │
 │          - Connexions V2V: Lignes vertes  │
+│          - Tuiles OSM: Fond de carte      │
 │                                            │
 ├────────────────────────────────────────────┤
-│ FPS: 60 | Vehicles: 2000 | Connections: ~15k │ Status
+│ FPS: 30 | Vehicles: 2000 | Connections: ~15k │ Status
 └────────────────────────────────────────────┘
 ```
 
 ### Contrôles
 
-| Action | Contrôle |
-|--------|----------|
-| **Démarrer simulation** | Bouton Start ou Espace |
-| **Pause** | Bouton Pause |
-| **Zoom +** | Molette haut |
-| **Zoom -** | Molette bas |
-| **Pan** | Click + Drag souris |
-| **Accélérer temps** | Slider Speed |
-| **Changer nb véhicules** | SpinBox (stop requis) |
+| Action                  | Contrôle            |
+| ----------------------- | ------------------- |
+| **Démarrer simulation** | Bouton Start        |
+| **Pause**               | Bouton Pause        |
+| **Réinitialiser**       | Bouton Reset        |
+| **Zoom +**              | Molette haut        |
+| **Zoom -**              | Molette bas         |
+| **Pan**                 | Click + Drag souris |
+| **Accélérer temps**     | Slider Speed        |
+| **Afficher routes**     | Bouton Routes       |
+| **Toggle véhicules**    | Touche V            |
+| **Toggle connexions**   | Touche C            |
+| **Toggle routes**       | Touche R            |
+| **Retour Mulhouse**     | Touche H            |
 
 ### Configuration
 
-Modifier `config/mulhouse.json` :
+Les paramètres de simulation sont configurés directement dans le code source:
 
-```json
-{
-  "simulation": {
-    "initial_vehicles": 2000,      // Nombre de véhicules
-    "time_acceleration": 1.0,       // Vitesse simulation
-    "target_fps": 60                // FPS cible
-  },
-  "v2v": {
-    "transmission_radius_m": 300,   // Rayon transmission (100-500m)
-    "update_interval_ms": 50        // Fréquence update graphe
-  },
-  "rendering": {
-    "vsync": false,                 // V-Sync (limiter à 60 FPS)
-    "antialiasing": true,           // Anti-crénelage
-    "culling": true                 // Frustum culling
-  }
-}
-```
+**SimulationEngine** (`src/core/SimulationEngine.cpp`):
+
+- Fréquence de mise à jour: 30 Hz (33ms par frame)
+- Nombre de véhicules: configurable via l'UI (10-5000)
+- Rayon de transmission V2V: 300m par défaut
+
+**MapView** (`src/visualization/MapView.cpp`):
+
+- Centre par défaut: Alsace (48.08°N, 7.36°E)
+- Niveau de zoom initial: 10
+- Cache tuiles OSM: `osm_cache/` (généré automatiquement)
 
 ---
 
@@ -244,67 +240,66 @@ Modifier `config/mulhouse.json` :
 ### ✅ Étape 1 : Visualisation Interactive (Implémenté)
 
 - [x] Fenêtre Qt professionnelle
-- [x] MapView avec QOpenGLWidget
+- [x] MapView avec QPainter
 - [x] Zoom/Pan interactif
 - [x] Interface toolbar + status bar
-- [ ] Chargement tuiles OSM (TODO)
+- [x] Chargement tuiles OSM dynamiques
 
-### ✅ Étape 2 : Graphe Routier (Architecture prête)
+### ✅ Étape 2 : Graphe Routier (Implémenté)
 
 - [x] Structure `RoadGraph` avec Boost.Graph
-- [x] Headers pour `OSMParser`
-- [ ] Parsing OSM avec libosmium (TODO)
-- [ ] Pathfinding A*/Dijkstra (TODO)
+- [x] Parsing OSM avec libosmium
+- [x] Affichage routes sur la carte
+- [x] Nœuds et arêtes du graphe routier
 
 ### ✅ Étape 3 : Simulation Véhicules (Implémenté)
 
 - [x] Classe `Vehicle` complète
-- [x] `SimulationEngine` avec boucle update 60 FPS
-- [x] Contrôle temps (pause, accélération)
-- [x] Génération 2000 véhicules
+- [x] `SimulationEngine` avec boucle update 30 Hz
+- [x] Contrôle temps (pause, accélération, reset)
+- [x] Génération 2000+ véhicules
+- [x] Mouvement fluide sur la carte
 
 ### ✅ Étape 4 : Graphe d'Interférences (Implémenté)
 
 - [x] `InterferenceGraph` avec R-tree spatial
 - [x] Recherche voisins O(log n)
 - [x] Update dynamique des connexions
-- [ ] Affichage connexions OpenGL (TODO)
+- [x] Affichage connexions V2V (lignes vertes)
+- [x] Cercles de transmission autour des véhicules
 
 ---
 
 ## 📊 Performance
 
-### Métriques Cibles
+### Métriques Actuelles
 
-| Métrique | Valeur | Status |
-|----------|--------|--------|
-| **FPS** | 60 | ✅ |
-| **Véhicules** | 2000+ | ✅ |
-| **Update Graphe** | < 5 ms | ✅ (R-tree) |
-| **RAM** | < 500 MB | ✅ |
+| Métrique          | Valeur   | Status      |
+| ----------------- | -------- | ----------- |
+| **FPS Logique**   | 30 Hz    | ✅          |
+| **FPS Affichage** | 15-30    | ✅          |
+| **Véhicules**     | 2000+    | ✅          |
+| **Update Graphe** | < 5 ms   | ✅ (R-tree) |
+| **RAM**           | < 500 MB | ✅          |
+| **CPU (1 core)**  | ~30-40%  | ✅          |
 
 ### Optimisations Implémentées
 
 ✅ **R-tree spatial index** → O(log n) queries  
-✅ **Multi-threading** (TBB ready)  
+✅ **Fréquence logique fixe** → 30 Hz (économie CPU)  
+✅ **Culling adaptatif** → Dessine selon zoom  
+✅ **InterferenceGraph dynamique** → Intervalle adaptatif  
 ✅ **Compilation optimisée** (`-O3 -march=native -flto`)  
-✅ **Profiler intégré** (macro `PROFILE_FUNCTION()`)  
-
-### Profiling
-
-```cpp
-// Dans votre code
-PROFILE_FUNCTION();  // Profile la fonction entière
-
-// Ou section spécifique
+✅ **Frustum culling** → Seulement véhicules visibles
 {
-    PROFILE_SCOPE("GraphUpdate");
-    // ... code à profiler
+PROFILE_SCOPE("GraphUpdate");
+// ... code à profiler
 }
 
 // Afficher rapport
 v2v::utils::Profiler::instance().printReport();
-```
+
+````
 
 ---
 
@@ -329,7 +324,7 @@ gdb ./v2v_simulator
 
 # Valgrind (détection fuites mémoire)
 valgrind --leak-check=full ./v2v_simulator
-```
+````
 
 ### Logs
 
@@ -344,28 +339,16 @@ LOG_ERROR("Erreur critique");
 
 ---
 
-## 📝 TODO / Roadmap
+## 📝 Roadmap Future
 
-### Court Terme
+### Améliorations Possibles
 
-- [ ] Implémenter chargement tuiles OSM
-- [ ] Parsing complet OSM → RoadGraph
-- [ ] Rendu connexions V2V (lignes OpenGL)
-- [ ] Pathfinding véhicules sur routes
-
-### Moyen Terme
-
-- [ ] Shaders OpenGL optimisés
-- [ ] Instanced rendering véhicules
-- [ ] Level of Detail (LOD)
-- [ ] Cache tuiles SQLite
-
-### Long Terme
-
-- [ ] Modèle propagation signal réaliste
-- [ ] Export données simulation (CSV)
-- [ ] Replay/Recording
-- [ ] Mode multi-zones
+- [ ] Pathfinding véhicules sur graphe routier (A\*)
+- [ ] Migration vers Qt Quick/QML pour GPU rendering
+- [ ] Thread séparé pour simulation (UI toujours fluide)
+- [ ] Export données simulation (CSV, JSON)
+- [ ] Replay/Recording de simulations
+- [ ] Modèle propagation signal plus réaliste
 
 ---
 

@@ -162,7 +162,6 @@ endif()
 set(CORE_SOURCES
     src/core/Vehicle.cpp
     src/core/SimulationEngine.cpp
-    src/core/TimeController.cpp
 )
 
 set(NETWORK_SOURCES
@@ -184,8 +183,6 @@ set(DATA_SOURCES
 
 set(UTILS_SOURCES
     src/utils/Logger.cpp
-    src/utils/Profiler.cpp
-    src/utils/Config.cpp
 )
 
 set(ALL_SOURCES
@@ -204,7 +201,6 @@ set(ALL_SOURCES
 set(CORE_HEADERS
     include/core/Vehicle.hpp
     include/core/SimulationEngine.hpp
-    include/core/TimeController.hpp
 )
 
 set(NETWORK_HEADERS
@@ -226,8 +222,6 @@ set(DATA_HEADERS
 
 set(UTILS_HEADERS
     include/utils/Logger.hpp
-    include/utils/Profiler.hpp
-    include/utils/Config.hpp
 )
 
 set(ALL_HEADERS

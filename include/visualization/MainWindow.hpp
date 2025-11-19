@@ -40,7 +40,6 @@ private slots:
     // Contrôles de simulation
     void onStartSimulation();
     void onPauseSimulation();
-    void onStopSimulation();
     void onResetSimulation();
     
     // Paramètres
@@ -49,13 +48,10 @@ private slots:
     void onTransmissionRadiusChanged(int value);
     
     // Updates
-    void updateStatusBar();
     void updateControls();
     
     // Fichiers
     void onLoadOSMFile();
-    void onSaveConfiguration();
-    void onLoadConfiguration();
 
 private:
     void createUI();
@@ -73,7 +69,6 @@ private:
     // Toolbar widgets
     QPushButton* m_btnStart;
     QPushButton* m_btnPause;
-    QPushButton* m_btnStop;
     QPushButton* m_btnReset;
     QSlider* m_timeScaleSlider;
     QLabel* m_timeScaleLabel;

@@ -1,7 +1,6 @@
 #include <QApplication>
 #include "visualization/MainWindow.hpp"
 #include "utils/Logger.hpp"
-#include "utils/Config.hpp"
 
 int main(int argc, char *argv[]) {
     // Initialisation Qt
@@ -18,14 +17,6 @@ int main(int argc, char *argv[]) {
     LOG_INFO("========================================");
     LOG_INFO("V2V Simulator - Starting");
     LOG_INFO("========================================");
-    
-    // Charger configuration
-    v2v::utils::Config& config = v2v::utils::Config::instance();
-    if (config.load("../config/mulhouse.json")) {
-        LOG_INFO("Configuration loaded successfully");
-    } else {
-        LOG_WARNING("Could not load config, using defaults");
-    }
     
     // Créer fenêtre principale
     v2v::visualization::MainWindow mainWindow;

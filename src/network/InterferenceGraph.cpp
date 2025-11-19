@@ -2,7 +2,6 @@
 #include "core/Vehicle.hpp"
 #include "data/GeometryUtils.hpp"
 #include "utils/Logger.hpp"
-#include "utils/Profiler.hpp"
 #include <algorithm>
 
 namespace v2v {
@@ -15,8 +14,6 @@ InterferenceGraph::InterferenceGraph()
 }
 
 void InterferenceGraph::update(const std::vector<std::shared_ptr<core::Vehicle>>& vehicles) {
-    PROFILE_FUNCTION();
-    
     // Clear previous state
     m_connections.clear();
     m_vehiclePositions.clear();

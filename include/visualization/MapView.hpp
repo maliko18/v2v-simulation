@@ -96,6 +96,7 @@ private:
     bool m_showVehicles;
     bool m_showConnections;
     bool m_showRoadGraph;
+    bool m_showTransmissionRadius;  // Afficher les cercles bleus de transmission
     bool m_vsyncEnabled;
     bool m_antialiasingEnabled;
     
