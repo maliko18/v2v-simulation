@@ -2,6 +2,7 @@
 #include "visualization/MapView.hpp"
 #include "core/SimulationEngine.hpp"
 #include "network/RoadGraph.hpp"
+#include "network/InterferenceGraph.hpp"
 #include "data/OSMParser.hpp"
 #include "utils/Logger.hpp"
 #include <QVBoxLayout>
@@ -209,6 +210,24 @@ void MainWindow::connectSignals() {
             this, &MainWindow::onVehicleCountChanged);
     connect(m_transmissionRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &MainWindow::onTransmissionRadiusChanged);
+    
+    // Update status bar on each simulation tick
+    connect(m_engine, &core::SimulationEngine::tick, this, [this]() {
+        // Update vehicle count
+        int vehicleCount = m_engine->getVehicles().size();
+        m_statusVehicles->setText(QString("Vehicles: %1").arg(vehicleCount));
+        
+        // Update connection count
+        auto* interferenceGraph = m_engine->getInterferenceGraph();
+        if (interferenceGraph) {
+            auto connections = interferenceGraph->getAllConnections();
+            m_statusConnections->setText(QString("Connections: %1").arg(connections.size()));
+        }
+        
+        // Update simulation time
+        double simTime = m_engine->getSimulationTime();
+        m_statusSimTime->setText(QString("Time: %1s").arg(simTime, 0, 'f', 1));
+    });
     
     // Repaint map view on each simulation tick so vehicles update smoothly
     connect(m_engine, &core::SimulationEngine::tick, m_mapView, qOverload<>(&QWidget::update));
