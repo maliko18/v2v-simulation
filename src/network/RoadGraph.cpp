@@ -17,21 +17,23 @@ void RoadGraph::clear() {
 
 VertexDescriptor RoadGraph::addNode(double lat, double lon) {
     RoadNode node;
+    // donner un id unique basé sur le nombre actuel de nœuds
     node.id = boost::num_vertices(m_graph);
     node.latitude = lat;
     node.longitude = lon;
+    // Position pour index spatial
     node.position = QPointF(lon, lat);
-    
+    // Ajouter le nœud au graphe et retourner l'id
     return boost::add_vertex(node, m_graph);
 }
 
 void RoadGraph::addEdge(VertexDescriptor from, VertexDescriptor to,
                         double length, double speedLimit, const std::string& roadType) {
-    RoadEdge edge;
-    edge.length = length;
-    edge.speedLimit = speedLimit;
-    edge.roadType = roadType;
-    
+    RoadEdge edge; // entre 2 intersections noeuds
+    edge.length = length; // longueur en mètres
+    edge.speedLimit = speedLimit; // vitesse limite en m/s
+    edge.roadType = roadType; // type de route
+    // Ajouter l'arête au graphe
     boost::add_edge(from, to, edge, m_graph);
 }
 
