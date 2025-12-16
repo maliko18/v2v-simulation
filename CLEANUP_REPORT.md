@@ -185,16 +185,16 @@ v2v-simulator/
 │
 ├── include/                       📦 Headers
 │   ├── core/
-│   │   ├── Vehicle.hpp           ✅ Véhicule (STEP 3 - Votre partie)
-│   │   └── SimulationEngine.hpp  ✅ Moteur simulation (STEP 3 - Votre partie)
+│   │   ├── Vehicle.hpp           ✅ Véhicule
+│   │   └── SimulationEngine.hpp  ✅ Moteur simulation
 │   ├── data/
 │   │   ├── OSMParser.hpp         ✅ Parseur OSM
 │   │   ├── TileManager.hpp       ✅ Gestionnaire tuiles
 │   │   └── GeometryUtils.hpp     ✅ Utilitaires géométrie
 │   ├── network/
-│   │   ├── RoadGraph.hpp         ✅ Graphe routier (STEP 2)
-│   │   ├── InterferenceGraph.hpp ✅ Graphe interférences (STEP 4)
-│   │   └── PathPlanner.hpp       ✅ Planificateur chemins (STEP 3 - À présenter)
+│   │   ├── RoadGraph.hpp         ✅ Graphe routier
+│   │   ├── InterferenceGraph.hpp ✅ Graphe interférences
+│   │   └── PathPlanner.hpp       ✅ Planificateur chemins
 │   ├── visualization/
 │   │   ├── MainWindow.hpp        ✅ Fenêtre principale
 │   │   └── MapView.hpp           ✅ Vue carte
@@ -204,16 +204,16 @@ v2v-simulator/
 ├── src/                           💻 Sources
 │   ├── main.cpp                  ✅ Point d'entrée
 │   ├── core/
-│   │   ├── Vehicle.cpp           (STEP 3 - Votre partie)
-│   │   └── SimulationEngine.cpp  (STEP 3 - Votre partie)
+│   │   ├── Vehicle.cpp
+│   │   └── SimulationEngine.cpp
 │   ├── data/
 │   │   ├── OSMParser.cpp
 │   │   ├── TileManager.cpp
 │   │   └── GeometryUtils.cpp
 │   ├── network/
-│   │   ├── RoadGraph.cpp         (STEP 2)
-│   │   ├── InterferenceGraph.cpp (STEP 4)
-│   │   └── PathPlanner.cpp       (STEP 3 - À présenter avec SimulationEngine)
+│   │   ├── RoadGraph.cpp
+│   │   ├── InterferenceGraph.cpp
+│   │   └── PathPlanner.cpp
 │   ├── visualization/
 │   │   ├── MainWindow.cpp
 │   │   └── MapView.cpp

@@ -38,8 +38,7 @@ protected:
 
 private slots:
     // Contrôles de simulation
-    void onStartSimulation();
-    void onPauseSimulation();
+    void onStartPauseToggle();
     void onResetSimulation();
     
     // Paramètres
@@ -67,8 +66,7 @@ private:
     core::SimulationEngine* m_engine;
     
     // Toolbar widgets
-    QPushButton* m_btnStart;
-    QPushButton* m_btnPause;
+    QPushButton* m_btnStartPause;
     QPushButton* m_btnReset;
     QSlider* m_timeScaleSlider;
     QLabel* m_timeScaleLabel;

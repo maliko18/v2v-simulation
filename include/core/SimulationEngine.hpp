@@ -100,6 +100,9 @@ private:
     qint64 m_lastUpdateTime;
     int m_frameCount;
     qint64 m_lastFPSUpdate;
+
+    // Adaptive update interval for interference graph
+    int m_interferenceUpdateInterval;
 };
 
 } // namespace core

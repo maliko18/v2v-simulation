@@ -72,18 +72,11 @@ void MainWindow::createUI() {
     line1->setStyleSheet("background-color: #555;");
     leftLayout->addWidget(line1);
     
-    // Boutons de contrôle
-    m_btnStart = new QPushButton("▶ Start Simulation", leftPanel);
-    m_btnStart->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 10px; font-size: 13px; border-radius: 5px; }"
+    // Boutons de contrôle - seulement 2 boutons
+    m_btnStartPause = new QPushButton("▶ Start", leftPanel);
+    m_btnStartPause->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 10px; font-size: 13px; border-radius: 5px; }"
                               "QPushButton:hover { background-color: #45a049; }");
-    leftLayout->addWidget(m_btnStart);
-    
-    m_btnPause = new QPushButton("⏸ Pause", leftPanel);
-    m_btnPause->setEnabled(false);
-    m_btnPause->setStyleSheet("QPushButton { background-color: #FFC107; color: black; padding: 8px; border-radius: 5px; }"
-                              "QPushButton:hover { background-color: #FFB300; }"
-                              "QPushButton:disabled { background-color: #555; color: #888; }");
-    leftLayout->addWidget(m_btnPause);
+    leftLayout->addWidget(m_btnStartPause);
     
     m_btnReset = new QPushButton("↻ Reset", leftPanel);
     m_btnReset->setStyleSheet("QPushButton { background-color: #607D8B; color: white; padding: 8px; border-radius: 5px; }"
@@ -201,8 +194,7 @@ void MainWindow::createMenuBar() {
 }
 
 void MainWindow::connectSignals() {
-    connect(m_btnStart, &QPushButton::clicked, this, &MainWindow::onStartSimulation);
-    connect(m_btnPause, &QPushButton::clicked, this, &MainWindow::onPauseSimulation);
+    connect(m_btnStartPause, &QPushButton::clicked, this, &MainWindow::onStartPauseToggle);
     connect(m_btnReset, &QPushButton::clicked, this, &MainWindow::onResetSimulation);
     
     connect(m_timeScaleSlider, &QSlider::valueChanged, this, &MainWindow::onTimeScaleChanged);
@@ -233,31 +225,39 @@ void MainWindow::connectSignals() {
     connect(m_engine, &core::SimulationEngine::tick, m_mapView, qOverload<>(&QWidget::update));
 }
 
-void MainWindow::onStartSimulation() {
-    LOG_INFO("Starting simulation");
-    
-    // Create vehicles if not already created
-    if (m_engine->getVehicles().empty()) {
-        m_engine->setVehicleCount(m_vehicleCountSpinBox->value());
+void MainWindow::onStartPauseToggle() {
+    if (m_isSimulationRunning) {
+        // Pause
+        LOG_INFO("Pausing simulation");
+        m_engine->pause();
+        m_isSimulationRunning = false;
+        m_btnStartPause->setText("▶ Start");
+        m_btnStartPause->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 10px; font-size: 13px; border-radius: 5px; }"
+                                       "QPushButton:hover { background-color: #45a049; }");
+    } else {
+        // Start
+        LOG_INFO("Starting simulation");
+        
+        // Create vehicles if not already created
+        if (m_engine->getVehicles().empty()) {
+            m_engine->setVehicleCount(m_vehicleCountSpinBox->value());
+        }
+        
+        m_engine->start();
+        m_isSimulationRunning = true;
+        m_btnStartPause->setText("⏸ Pause");
+        m_btnStartPause->setStyleSheet("QPushButton { background-color: #FFC107; color: black; padding: 10px; font-size: 13px; border-radius: 5px; }"
+                                       "QPushButton:hover { background-color: #FFB300; }");
     }
-    
-    m_engine->start();
-    m_isSimulationRunning = true;
-    updateControls();
-}
-
-void MainWindow::onPauseSimulation() {
-    LOG_INFO("Pausing simulation");
-    m_engine->pause();
-    m_isSimulationRunning = false;
-    updateControls();
 }
 
 void MainWindow::onResetSimulation() {
     LOG_INFO("Resetting simulation");
     m_engine->reset();
     m_isSimulationRunning = false;
-    updateControls();
+    m_btnStartPause->setText("▶ Start");
+    m_btnStartPause->setStyleSheet("QPushButton { background-color: #4CAF50; color: white; padding: 10px; font-size: 13px; border-radius: 5px; }"
+                                   "QPushButton:hover { background-color: #45a049; }");
 }
 
 void MainWindow::onTimeScaleChanged(int value) {
@@ -278,8 +278,7 @@ void MainWindow::onTransmissionRadiusChanged(int value) {
 }
 
 void MainWindow::updateControls() {
-    m_btnStart->setEnabled(!m_isSimulationRunning);
-    m_btnPause->setEnabled(m_isSimulationRunning);
+    // Plus utilisé - le bouton toggle gère son propre état
 }
 
 void MainWindow::onLoadOSMFile() {

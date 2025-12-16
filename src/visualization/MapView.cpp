@@ -149,9 +149,10 @@ void MapView::paintEvent(QPaintEvent* event) {
         // Première passe : identifier les véhicules visibles uniquement
         std::vector<std::pair<core::Vehicle*, QPointF>> visibleVehicles;
         
-        // AUGMENTÉ : Afficher TOUS les véhicules si pas de lag
-        size_t maxVisible = 2000;  // Afficher jusqu'à 2000 véhicules
-        
+        // ADAPTATIF : Limite basée sur le nombre total de véhicules
+        // Augmenté pour afficher tous les véhicules à tous les niveaux de zoom
+        size_t maxVisible = (vehicles.size() > 2000) ? 2000 : 5000;
+
         visibleVehicles.reserve(maxVisible);
         
         for (const auto& vehicle : vehicles) {
@@ -173,30 +174,29 @@ void MapView::paintEvent(QPaintEvent* event) {
         
         // Créer une map pour lookup rapide: vehicleId -> screenPos
         std::unordered_map<int, QPointF> vehicleIdToScreenPos;
+        vehicleIdToScreenPos.reserve(visibleVehicles.size());
         for (const auto& [vehicle, screenPos] : visibleVehicles) {
             vehicleIdToScreenPos[vehicle->getId()] = screenPos;
         }
         
-        // Dessiner les rayons de transmission (cercles autour des véhicules)
-        if (m_showTransmissionRadius) {
+        // Dessiner les rayons de transmission - DÉSACTIVÉ si trop de véhicules
+        if (m_showTransmissionRadius && visibleVehicles.size() < 200) {
+            painter.setPen(QPen(QColor(100, 150, 255, 80), 1.5));
+            painter.setBrush(QColor(100, 150, 255, 30));
+
             for (const auto& [vehicle, screenPos] : visibleVehicles) {
                 int radiusMeters = vehicle->getTransmissionRadius();
                 double radiusPixels = metersToPixels(radiusMeters, vehicle->getLatitude());
-                
-                // Dessiner le cercle de rayon avec une couleur semi-transparente
-                painter.setPen(QPen(QColor(100, 150, 255, 80), 1.5));  // Bleu clair semi-transparent
-                painter.setBrush(QColor(100, 150, 255, 30));  // Remplissage très transparent
                 painter.drawEllipse(screenPos, radiusPixels, radiusPixels);
             }
         }
         
-        // Dessiner les connexions V2V (edges entre véhicules connectés)
-        // OPTIMISÉ: Limiter le nombre de connexions dessinées pour performance
-        if (m_showConnections && visibleVehicles.size() < 500) {  // Seulement si < 500 véhicules visibles
+        // Dessiner les connexions V2V - LIMITÉ pour éviter freeze
+        if (m_showConnections && visibleVehicles.size() < 300) {
             auto* interferenceGraph = m_engine->getInterferenceGraph();
             if (interferenceGraph) {
-                // Limiter le nombre de connexions à dessiner (max 2000 pour performance)
-                const size_t maxConnectionsToDraw = 2000;
+                // Limite adaptative basée sur le nombre de véhicules
+                const size_t maxConnectionsToDraw = (visibleVehicles.size() > 200) ? 500 : 1000;
                 size_t connectionsDrawn = 0;
                 
                 // Dessiner les lignes de connexion (plus épaisses)
@@ -233,13 +233,27 @@ void MapView::paintEvent(QPaintEvent* event) {
             }
         }
         
-        // Dessiner les véhicules ULTRA-SIMPLIFIÉ pour supporter 2000 véhicules
+        // Dessiner les véhicules - taille adaptative selon le zoom
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(255, 50, 50));
         
+        // Taille du véhicule adaptée au zoom pour être toujours visible
+        int vehicleSize;
+        if (m_zoomLevel <= 8) {
+            vehicleSize = 6;  // Plus grand aux zooms faibles
+        } else if (m_zoomLevel <= 10) {
+            vehicleSize = 5;
+        } else if (m_zoomLevel <= 12) {
+            vehicleSize = 4;
+        } else if (m_zoomLevel <= 14) {
+            vehicleSize = 4;
+        } else {
+            vehicleSize = 5;  // Plus grand aux zooms élevés
+        }
+
         for (const auto& [vehicle, screenPos] : visibleVehicles) {
             // Simple cercle sans rotation ni flèche
-            painter.drawEllipse(screenPos, 4, 4);
+            painter.drawEllipse(screenPos, vehicleSize, vehicleSize);
         }
     }
     

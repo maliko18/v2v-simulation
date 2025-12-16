@@ -3,6 +3,7 @@
 #include "data/GeometryUtils.hpp"
 #include "utils/Logger.hpp"
 #include <algorithm>
+#include <chrono>
 
 namespace v2v {
 namespace network {
@@ -14,11 +15,21 @@ InterferenceGraph::InterferenceGraph()
 }
 
 void InterferenceGraph::update(const std::vector<std::shared_ptr<core::Vehicle>>& vehicles) {
-    // Clear previous state
+    auto startTime = std::chrono::high_resolution_clock::now();
+
+    // Reserve capacity to avoid rehashing
+    const size_t vehicleCount = vehicles.size();
     m_connections.clear();
+    m_connections.reserve(vehicleCount);
     m_vehiclePositions.clear();
+    m_vehiclePositions.reserve(vehicleCount);
     m_transmissionRadii.clear();
-    
+    m_transmissionRadii.reserve(vehicleCount);
+
+    // OPTIMIZATION: Build a lookup map for O(1) access instead of O(n) find_if
+    std::unordered_map<int, std::shared_ptr<core::Vehicle>> vehicleLookup;
+    vehicleLookup.reserve(vehicleCount);
+
     // Update vehicle positions
     for (const auto& vehicle : vehicles) {
         if (!vehicle->isActive()) continue;
@@ -29,51 +40,53 @@ void InterferenceGraph::update(const std::vector<std::shared_ptr<core::Vehicle>>
         
         m_vehiclePositions[id] = point;
         m_transmissionRadii[id] = vehicle->getTransmissionRadius();
+        vehicleLookup[id] = vehicle;  // O(1) lookup
     }
     
-    // Rebuild R-tree
+    // Rebuild R-tree with bulk loading for better performance
     rebuildRTree();
     
-    // Find connections
-    // Two vehicles connect if one vehicle's position is inside the other's transmission radius
-    // This means: distance <= min(radius1, radius2) OR we check both directions
-    // For V2V: both vehicles must be able to reach each other, so distance <= min(radius1, radius2)
-    for (const auto& vehicle : vehicles) {
-        if (!vehicle->isActive()) continue;
-        
-        int id = vehicle->getId();
-        double radius1 = vehicle->getTransmissionRadius(); // in meters
-        
+    // OPTIMIZATION: Pre-compute meters per degree (constant for this region)
+    const double metersPerDegree = 111320.0;
+
+    // Find connections using O(1) lookup instead of O(n) find_if
+    for (const auto& [id, vehicle] : vehicleLookup) {
+        double radius1 = m_transmissionRadii[id]; // in meters
+
         // Query neighbors with search radius (in degrees, approximate)
-        // Convert meters to degrees for search: 1 degree ≈ 111320 meters
-        const double metersPerDegree = 111320.0;
         double searchRadiusDegrees = radius1 / metersPerDegree;
         
         auto candidates = queryNeighbors(id, searchRadiusDegrees);
         
         std::unordered_set<int> connectedNeighbors;
+        connectedNeighbors.reserve(candidates.size());
+
         for (int candidateId : candidates) {
-            // Find the candidate vehicle to get its radius
-            auto candidateIt = std::find_if(vehicles.begin(), vehicles.end(),
-                [candidateId](const auto& v) { return v->getId() == candidateId && v->isActive(); });
-            
-            if (candidateIt == vehicles.end()) continue;
-            
-            const auto& candidateVehicle = *candidateIt;
-            double radius2 = candidateVehicle->getTransmissionRadius(); // in meters
-            
+            // OPTIMIZATION: O(1) lookup instead of O(n) find_if
+            auto candidateIt = vehicleLookup.find(candidateId);
+            if (candidateIt == vehicleLookup.end()) continue;
+
+            double radius2 = m_transmissionRadii[candidateId]; // in meters
+
             // Calculate actual distance in meters using Haversine
             double distMeters = distanceInMeters(id, candidateId);
             
             // Connect if the distance is within BOTH vehicles' radii
-            // This means both vehicles can reach each other (bidirectional communication)
-            // Vehicle B is inside Vehicle A's radius AND Vehicle A is inside Vehicle B's radius
             if (distMeters <= radius1 && distMeters <= radius2) {
                 connectedNeighbors.insert(candidateId);
             }
         }
         
-        m_connections[id] = connectedNeighbors;
+        m_connections[id] = std::move(connectedNeighbors);
+    }
+
+    // Performance logging
+    auto endTime = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
+    if (duration.count() > 50) {  // Log if update takes > 50ms
+        LOG_WARNING(QString("InterferenceGraph::update took %1 ms for %2 vehicles")
+                   .arg(duration.count())
+                   .arg(vehicleCount));
     }
 }
 

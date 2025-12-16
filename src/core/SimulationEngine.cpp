@@ -15,7 +15,7 @@ SimulationEngine::SimulationEngine(QObject* parent)
     , m_state(State::Stopped)
     , m_updateTimer(new QTimer(this))
     , m_timeScale(1.0)
-    , m_targetFPS(30)  // Réduit de 60 à 30 FPS pour meilleures performances
+    , m_targetFPS(30)  // 30 FPS pour meilleures performances
     , m_currentFPS(0)
     , m_simulationTime(0.0)
     , m_roadGraph(std::make_unique<network::RoadGraph>())
@@ -24,14 +24,14 @@ SimulationEngine::SimulationEngine(QObject* parent)
     , m_lastUpdateTime(0)
     , m_frameCount(0)
     , m_lastFPSUpdate(0)
+    , m_interferenceUpdateInterval(15)  // Mise à jour toutes les 15 frames (configurable)
 {
-    // Configure timer pour 30 FPS (meilleure performance)
+    // Configure timer pour 30 FPS
     m_updateTimer->setInterval(1000 / m_targetFPS);
+    m_updateTimer->setTimerType(Qt::PreciseTimer);  // Timer précis pour stabilité
     connect(m_updateTimer, &QTimer::timeout, this, &SimulationEngine::updateSimulation);
     
-    // PathPlanner sera initialisé quand le graphe routier sera chargé
-    
-    LOG_INFO("SimulationEngine initialized");
+    LOG_INFO("SimulationEngine initialized with adaptive interference update");
 }
 
 SimulationEngine::~SimulationEngine() {
@@ -111,26 +111,54 @@ int SimulationEngine::getActiveVehicleCount() const {
 }
 
 void SimulationEngine::updateSimulation() {
+    auto frameStart = std::chrono::high_resolution_clock::now();
+
     qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
     double deltaTime = (currentTime - m_lastUpdateTime) / 1000.0 * m_timeScale;
     m_lastUpdateTime = currentTime;
     
     // Update vehicles
+    auto vehicleStart = std::chrono::high_resolution_clock::now();
     updateVehiclePositions(deltaTime);
-    
-    // Update interference graph (utilise R-tree donc O(n log n), pas O(n²))
-    // Mise à jour toutes les 10 frames pour performance (réduit la charge CPU)
+    auto vehicleEnd = std::chrono::high_resolution_clock::now();
+
+    // Update interference graph avec intervalle adaptatif
+    // Plus il y a de véhicules, moins on met à jour souvent
     static int frameCounter = 0;
-    if (++frameCounter >= 10) {
+    int adaptiveInterval = m_interferenceUpdateInterval;
+
+    // Adaptation basée sur le nombre de véhicules
+    if (m_vehicles.size() > 1500) {
+        adaptiveInterval = 30;  // Update toutes les 30 frames (1 sec à 30 FPS)
+    } else if (m_vehicles.size() > 1000) {
+        adaptiveInterval = 20;  // Update toutes les 20 frames
+    } else if (m_vehicles.size() > 500) {
+        adaptiveInterval = 15;  // Update toutes les 15 frames
+    }
+
+    auto interferenceStart = std::chrono::high_resolution_clock::now();
+    if (++frameCounter >= adaptiveInterval) {
         updateInterferenceGraph();
         frameCounter = 0;
     }
-    
+    auto interferenceEnd = std::chrono::high_resolution_clock::now();
+
     // Calculate FPS
     calculateFPS();
     
     m_simulationTime += deltaTime;
     
+    // Performance monitoring
+    auto frameEnd = std::chrono::high_resolution_clock::now();
+    auto totalMs = std::chrono::duration_cast<std::chrono::milliseconds>(frameEnd - frameStart).count();
+
+    if (totalMs > 50) {  // Warning si frame > 50ms (< 20 FPS)
+        auto vehicleMs = std::chrono::duration_cast<std::chrono::milliseconds>(vehicleEnd - vehicleStart).count();
+        auto interferenceMs = std::chrono::duration_cast<std::chrono::milliseconds>(interferenceEnd - interferenceStart).count();
+        LOG_WARNING(QString("Slow frame: %1ms (vehicles: %2ms, interference: %3ms, count: %4)")
+                   .arg(totalMs).arg(vehicleMs).arg(interferenceMs).arg(m_vehicles.size()));
+    }
+
     // Notifier l'UI que la simulation a avancé (permet de redessiner la vue)
     emit tick();
 }
