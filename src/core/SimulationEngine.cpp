@@ -220,6 +220,10 @@ void SimulationEngine::createVehicles(int count) {
     std::uniform_int_distribution<> node_dist(0, boost::num_vertices(graph) - 1);
     std::uniform_real_distribution<> speed_dist(10.0, 25.0); // 10-25 m/s (36-90 km/h)
     
+    // Rayons de transmission possibles : 100, 200, 300, 400, 500 mètres
+    static const int possibleRadii[5] = {100, 200, 300, 400, 500};
+    std::uniform_int_distribution<> radius_dist(0, 4);
+    
     int successCount = 0;
     
     // Timer pour éviter blocage avec gros fichiers OSM
@@ -248,6 +252,9 @@ void SimulationEngine::createVehicles(int count) {
         vehicle->setGeoPosition(startNode.latitude, startNode.longitude);
         vehicle->setPosition(startPos);
         vehicle->setSpeed(speed_dist(gen));
+        
+        // Rayon de transmission aléatoire parmi 100, 200, 300, 400, 500
+        vehicle->setTransmissionRadius(possibleRadii[radius_dist(gen)]);
         
         // Log seulement les 10 premiers véhicules
         if (i < 10) {

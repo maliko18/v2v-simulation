@@ -26,58 +26,71 @@ void InterferenceGraph::update(const std::vector<std::shared_ptr<core::Vehicle>>
     m_transmissionRadii.clear();
     m_transmissionRadii.reserve(vehicleCount);
 
-    // OPTIMIZATION: Build a lookup map for O(1) access instead of O(n) find_if
-    std::unordered_map<int, std::shared_ptr<core::Vehicle>> vehicleLookup;
-    vehicleLookup.reserve(vehicleCount);
+    // Build list of active vehicles with their data
+    struct VehicleData {
+        int id;
+        double lat;
+        double lon;
+        double radius;  // in meters
+    };
+    std::vector<VehicleData> activeVehicles;
+    activeVehicles.reserve(vehicleCount);
 
     // Update vehicle positions
     for (const auto& vehicle : vehicles) {
         if (!vehicle->isActive()) continue;
         
         int id = vehicle->getId();
-        QPointF pos = vehicle->getPosition();
-        Point2D point(pos.x(), pos.y());
+        double lat = vehicle->getLatitude();
+        double lon = vehicle->getLongitude();
+        double radius = static_cast<double>(vehicle->getTransmissionRadius());
         
+        Point2D point(lon, lat);  // x=lon, y=lat
         m_vehiclePositions[id] = point;
         m_transmissionRadii[id] = vehicle->getTransmissionRadius();
-        vehicleLookup[id] = vehicle;  // O(1) lookup
+        
+        activeVehicles.push_back({id, lat, lon, radius});
     }
     
-    // Rebuild R-tree with bulk loading for better performance
+    // Rebuild R-tree
     rebuildRTree();
     
-    // OPTIMIZATION: Pre-compute meters per degree (constant for this region)
+    // Constante pour convertir degrés en mètres
     const double metersPerDegree = 111320.0;
-
-    // Find connections using O(1) lookup instead of O(n) find_if
-    for (const auto& [id, vehicle] : vehicleLookup) {
-        double radius1 = m_transmissionRadii[id]; // in meters
-
-        // Query neighbors with search radius (in degrees, approximate)
-        double searchRadiusDegrees = radius1 / metersPerDegree;
-        
-        auto candidates = queryNeighbors(id, searchRadiusDegrees);
-        
+    
+    // Find connections - LOGIQUE ORIGINALE
+    // Connexion quand un véhicule entre dans le rayon de l'autre
+    // (distance <= rayon1 ET distance <= rayon2)
+    
+    for (size_t i = 0; i < activeVehicles.size(); ++i) {
+        const auto& v1 = activeVehicles[i];
         std::unordered_set<int> connectedNeighbors;
-        connectedNeighbors.reserve(candidates.size());
-
-        for (int candidateId : candidates) {
-            // OPTIMIZATION: O(1) lookup instead of O(n) find_if
-            auto candidateIt = vehicleLookup.find(candidateId);
-            if (candidateIt == vehicleLookup.end()) continue;
-
-            double radius2 = m_transmissionRadii[candidateId]; // in meters
-
-            // Calculate actual distance in meters using Haversine
-            double distMeters = distanceInMeters(id, candidateId);
+        
+        for (size_t j = 0; j < activeVehicles.size(); ++j) {
+            if (i == j) continue;
             
-            // Connect if the distance is within BOTH vehicles' radii
-            if (distMeters <= radius1 && distMeters <= radius2) {
-                connectedNeighbors.insert(candidateId);
+            const auto& v2 = activeVehicles[j];
+            
+            // Calcul de distance
+            double dLat = v2.lat - v1.lat;
+            double dLon = v2.lon - v1.lon;
+            
+            // Convertir en mètres
+            double dLatMeters = dLat * metersPerDegree;
+            double dLonMeters = dLon * metersPerDegree;
+            
+            // Distance euclidienne en mètres
+            double distMeters = std::sqrt(dLatMeters * dLatMeters + dLonMeters * dLonMeters);
+            
+            // CONNEXION si un véhicule est dans le rayon de l'autre
+            
+            double maxRadius = std::max(v1.radius, v2.radius);
+            if (distMeters <= maxRadius) {
+                connectedNeighbors.insert(v2.id);
             }
         }
         
-        m_connections[id] = std::move(connectedNeighbors);
+        m_connections[v1.id] = std::move(connectedNeighbors);
     }
 
     // Performance logging
@@ -152,7 +165,7 @@ void InterferenceGraph::rebuildRTree() {
     }
 }
 
-std::vector<int> InterferenceGraph::queryNeighbors(int vehicleId, double radius) const {
+std::vector<int> InterferenceGraph::queryNeighbors(int vehicleId, double radiusDegrees) const {
     auto posIt = m_vehiclePositions.find(vehicleId);
     if (posIt == m_vehiclePositions.end()) {
         return std::vector<int>();
@@ -160,16 +173,19 @@ std::vector<int> InterferenceGraph::queryNeighbors(int vehicleId, double radius)
     
     const Point2D& center = posIt->second;
     Box queryBox(
-        Point2D(center.get<0>() - radius, center.get<1>() - radius),
-        Point2D(center.get<0>() + radius, center.get<1>() + radius)
+        Point2D(center.get<0>() - radiusDegrees, center.get<1>() - radiusDegrees),
+        Point2D(center.get<0>() + radiusDegrees, center.get<1>() + radiusDegrees)
     );
     
     std::vector<RTreeValue> results;
     m_rtree->query(bgi::intersects(queryBox), std::back_inserter(results));
     
+    // Retourner tous les candidats sans pré-filtrage
+    // Le filtrage précis sera fait avec distanceInMeters() dans update()
     std::vector<int> neighbors;
+    neighbors.reserve(results.size());
     for (const auto& [point, id] : results) {
-        if (id != vehicleId && distance(vehicleId, id) <= radius) {
+        if (id != vehicleId) {
             neighbors.push_back(id);
         }
     }

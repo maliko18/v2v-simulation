@@ -1,0 +1,786 @@
+\documentclass[12pt,a4paper]{article}
+
+% ============================================================================
+% PACKAGES
+% ============================================================================
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{geometry}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{fontawesome5}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% ============================================================================
+% CONFIGURATION
+% ============================================================================
+\geometry{margin=2.5cm}
+
+% Couleurs personnalisées
+\definecolor{v2vprimary}{RGB}{76, 175, 80}      % Vert V2V
+\definecolor{v2vsecondary}{RGB}{43, 43, 43}     % Gris foncé
+\definecolor{v2vlight}{RGB}{240, 248, 255}      % Bleu clair
+\definecolor{codebackground}{RGB}{245, 245, 245}
+\definecolor{codecomment}{RGB}{0, 128, 0}
+\definecolor{codekeyword}{RGB}{0, 0, 255}
+\definecolor{codestring}{RGB}{163, 21, 21}
+
+% Configuration des liens
+\hypersetup{
+    colorlinks=true,
+    linkcolor=v2vprimary,
+    filecolor=v2vprimary,
+    urlcolor=v2vprimary,
+    citecolor=v2vprimary,
+    pdftitle={Manuel d'Utilisation - V2V Simulator},
+    pdfauthor={Équipe V2V},
+    pdfsubject={Simulateur de Véhicules Communicants},
+    pdfkeywords={V2V, simulation, VANET, communication véhiculaire}
+}
+
+% Configuration des listings (code)
+\lstset{
+    backgroundcolor=\color{codebackground},
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    captionpos=b,
+    commentstyle=\color{codecomment},
+    frame=single,
+    keywordstyle=\color{codekeyword}\bfseries,
+    language=bash,
+    numbers=left,
+    numbersep=5pt,
+    numberstyle=\tiny\color{gray},
+    showstringspaces=false,
+    stringstyle=\color{codestring},
+    tabsize=4,
+    xleftmargin=2em,
+    framexleftmargin=1.5em
+}
+
+% Configuration des titres
+\titleformat{\section}
+    {\Large\bfseries\color{v2vprimary}}
+    {\thesection}{1em}{}
+\titleformat{\subsection}
+    {\large\bfseries\color{v2vsecondary}}
+    {\thesubsection}{1em}{}
+\titleformat{\subsubsection}
+    {\normalsize\bfseries\color{v2vsecondary}}
+    {\thesubsubsection}{1em}{}
+
+% En-têtes et pieds de page
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{v2vprimary}{\textbf{V2V Simulator}}}
+\fancyhead[R]{\textcolor{gray}{Manuel d'Utilisation}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{1pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{v2vprimary}\leaders\hrule height \headrulewidth\hfill}}
+
+% Boîtes personnalisées
+\newtcolorbox{notebox}{
+    colback=v2vlight,
+    colframe=v2vprimary,
+    title={\faInfoCircle\ Note},
+    fonttitle=\bfseries,
+    boxrule=1pt,
+    arc=3pt
+}
+
+\newtcolorbox{warningbox}{
+    colback=yellow!10,
+    colframe=orange,
+    title={\faExclamationTriangle\ Attention},
+    fonttitle=\bfseries,
+    boxrule=1pt,
+    arc=3pt
+}
+
+\newtcolorbox{tipbox}{
+    colback=green!5,
+    colframe=v2vprimary,
+    title={\faLightbulb\ Astuce},
+    fonttitle=\bfseries,
+    boxrule=1pt,
+    arc=3pt
+}
+
+% ============================================================================
+% DOCUMENT
+% ============================================================================
+\begin{document}
+
+% ============================================================================
+% PAGE DE TITRE
+% ============================================================================
+\begin{titlepage}
+    \centering
+    \vspace*{2cm}
+    
+    {\Huge\bfseries\textcolor{v2vprimary}{V2V Simulator}}\\[0.5cm]
+    {\LARGE\textcolor{v2vsecondary}{Simulateur de Véhicules Communicants}}\\[2cm]
+    
+    \rule{\linewidth}{1pt}\\[0.5cm]
+    {\huge\bfseries Manuel d'Utilisation}\\[0.5cm]
+    \rule{\linewidth}{1pt}\\[2cm]
+    
+    {\Large Version 1.0}\\[0.5cm]
+    {\large Décembre 2024}\\[3cm]
+    
+    \begin{center}
+    \begin{tabular}{rl}
+        \textbf{Technologies :} & C++20, Qt6, Boost.Graph, QXmlStreamReader \\[0.3cm]
+        \textbf{Plateforme :} & Linux (Ubuntu 22.04+) \\[0.3cm]
+        \textbf{Licence :} & Open Source \\
+    \end{tabular}
+    \end{center}
+    
+    \vfill
+    
+    {\large\textit{Projet de Réseaux Mobiles}}\\
+    {\large Université de Haute-Alsace}
+    
+\end{titlepage}
+
+% ============================================================================
+% TABLE DES MATIÈRES
+% ============================================================================
+\tableofcontents
+\newpage
+
+% ============================================================================
+% INTRODUCTION
+% ============================================================================
+\section{Introduction}
+
+\subsection{Présentation du Projet}
+
+Le \textbf{V2V Simulator} est un simulateur de communication véhicule-à-véhicule (Vehicle-to-Vehicle) développé en C++20 avec Qt6. Il permet de visualiser et d'analyser les communications entre véhicules autonomes dans un environnement urbain réaliste basé sur des données cartographiques OpenStreetMap.
+
+\subsection{Objectifs}
+
+\begin{itemize}[leftmargin=2cm]
+    \item[\faCheck] Simuler le déplacement de véhicules sur un réseau routier réel
+    \item[\faCheck] Modéliser les communications sans fil entre véhicules
+    \item[\faCheck] Visualiser les graphes d'interférences et de connectivité
+    \item[\faCheck] Analyser les performances du réseau V2V (VANET)
+    \item[\faCheck] Étudier l'impact de la densité de véhicules sur la connectivité
+\end{itemize}
+
+\subsection{Fonctionnalités Principales}
+
+\begin{enumerate}
+    \item \textbf{Visualisation Interactive} : Carte OpenStreetMap avec zoom et panoramique
+    \item \textbf{Simulation Multi-Véhicules} : Jusqu'à 5000 véhicules simultanés
+    \item \textbf{Graphe Routier} : Navigation réaliste sur routes réelles
+    \item \textbf{Communications V2V} : Modèle de propagation radio simplifié
+    \item \textbf{Graphe d'Interférences} : Visualisation des connexions entre véhicules
+\end{enumerate}
+
+% ============================================================================
+% PRÉREQUIS
+% ============================================================================
+\section{Prérequis et Installation}
+
+\subsection{Configuration Matérielle Recommandée}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Composant} & \textbf{Minimum} & \textbf{Recommandé} \\
+\midrule
+Processeur & Intel Core i5 / AMD Ryzen 5 & Intel Core i7 / AMD Ryzen 7 \\
+Mémoire RAM & 8 Go & 16 Go \\
+Stockage & 2 Go disponibles & 5 Go SSD \\
+Carte graphique & Intégrée & GPU dédié avec OpenGL 3.3+ \\
+Résolution écran & 1920×1080 & 2560×1440 ou supérieur \\
+\bottomrule
+\end{tabular}
+\caption{Configuration matérielle}
+\end{table}
+
+\subsection{Dépendances Logicielles}
+
+\subsubsection{Système d'Exploitation}
+\begin{itemize}
+    \item Linux (Ubuntu 22.04 LTS ou supérieur recommandé)
+    \item Kernel 5.15 ou supérieur
+\end{itemize}
+
+\subsubsection{Compilateur et Outils de Build}
+\begin{lstlisting}[language=bash]
+# Installation des outils de base
+sudo apt update
+sudo apt install -y build-essential cmake ninja-build git
+sudo apt install -y g++-12  # Support C++20
+\end{lstlisting}
+
+\subsubsection{Bibliothèques Requises}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Bibliothèque} & \textbf{Version} & \textbf{Description} \\
+\midrule
+Qt6 & 6.4+ & Framework d'interface graphique et parser XML (QXmlStreamReader) \\
+Boost & 1.74+ & Boost.Graph pour les algorithmes de graphe \\
+TBB & 2021.5+ & Parallélisation Intel Threading Building Blocks \\
+Eigen3 & 3.4+ & Bibliothèque d'algèbre linéaire \\
+libcurl & 7.81+ & Téléchargement des tuiles OSM \\
+SQLite3 & 3.37+ & Cache des tuiles de carte \\
+\bottomrule
+\end{tabular}
+\caption{Bibliothèques requises}
+\end{table}
+
+\begin{lstlisting}[language=bash, caption={Installation des dépendances}]
+# Qt6
+sudo apt install -y qt6-base-dev qt6-tools-dev libqt6svg6-dev \
+    libqt6opengl6-dev qt6-positioning-dev
+
+# Boost
+sudo apt install -y libboost-all-dev
+
+# Autres bibliothèques
+sudo apt install -y libtbb-dev libeigen3-dev libcurl4-openssl-dev \
+    libsqlite3-dev libgl-dev
+\end{lstlisting}
+
+\subsection{Installation depuis les Sources}
+
+\subsubsection{Clonage du Dépôt}
+\begin{lstlisting}[language=bash]
+git clone https://github.com/maliko18/v2v-simulation.git
+cd v2v-simulation
+\end{lstlisting}
+
+\subsubsection{Compilation}
+\begin{lstlisting}[language=bash]
+# Créer le répertoire de build
+mkdir cmake-build-debug && cd cmake-build-debug
+
+# Configuration CMake
+cmake -DCMAKE_BUILD_TYPE=Release -GNinja ..
+
+# Compilation
+ninja
+
+# Lancement
+./v2v_simulator
+\end{lstlisting}
+
+\begin{tipbox}
+Pour une compilation optimisée, utilisez \texttt{-DCMAKE\_BUILD\_TYPE=Release} et ajoutez les flags \texttt{-O3 -march=native} pour des performances maximales.
+\end{tipbox}
+
+% ============================================================================
+% INTERFACE UTILISATEUR
+% ============================================================================
+\section{Interface Utilisateur}
+
+\subsection{Vue d'Ensemble}
+
+L'interface du V2V Simulator est organisée en plusieurs zones fonctionnelles :
+
+\begin{figure}[H]
+\centering
+\begin{tcolorbox}[colback=white, colframe=v2vsecondary, width=\textwidth]
+\begin{verbatim}
+┌─────────────────────────────────────────────────────────────────┐
+│                         BARRE DE MENU                          │
+├──────────────┬──────────────────────────────────────────────────┤
+│              │                                                  │
+│   PANNEAU    │                                                  │
+│   DE         │              ZONE DE VISUALISATION               │
+│   CONTRÔLE   │                  (MapView)                       │
+│              │                                                  │
+│  - Start     │         Carte OpenStreetMap                      │
+│  - Pause     │         Véhicules (rectangles)                   │
+│  - Reset     │         Connexions V2V (lignes vertes)           │
+│  - Vitesse   │         Rayons de transmission (cercles bleus)   │
+│  - Véhicules │                                                  │
+│              │                                                  │
+├──────────────┴──────────────────────────────────────────────────┤
+│ Vehicles: 500 | Connections: 1234 | Time: 45.3s                │
+└─────────────────────────────────────────────────────────────────┘
+\end{verbatim}
+\end{tcolorbox}
+\caption{Structure de l'interface utilisateur}
+\end{figure}
+
+\subsection{Panneau de Contrôle (Gauche)}
+
+Le panneau de contrôle situé à gauche de l'écran permet de configurer et piloter la simulation.
+
+\subsubsection{Contrôles de Simulation}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Bouton} & \textbf{Fonction} \\
+\midrule
+\textcolor{v2vprimary}{\textbf{▶ Start}} & Démarre la simulation. Crée les véhicules si c'est le premier lancement. \\
+\textbf{⏸ Pause} & Met en pause la simulation. Les véhicules restent à leur position actuelle. \\
+\textbf{↻ Reset} & Arrête la simulation et supprime tous les véhicules. Remet le temps à zéro. \\
+\bottomrule
+\end{tabular}
+\caption{Boutons de contrôle de simulation}
+\end{table}
+
+\subsubsection{Paramètres de Simulation}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Paramètre} & \textbf{Plage} & \textbf{Description} \\
+\midrule
+Speed (Vitesse) & 0.1x - 10.0x & Échelle de temps de la simulation \\
+Vehicles (Véhicules) & 10 - 5000 & Nombre de véhicules à simuler \\
+\bottomrule
+\end{tabular}
+\caption{Paramètres configurables}
+\end{table}
+
+\begin{notebox}
+Le nombre de véhicules ne peut être modifié que lorsque la simulation est arrêtée. Cliquez sur \textbf{Reset} avant de changer ce paramètre.
+\end{notebox}
+
+\subsection{Zone de Visualisation (MapView)}
+
+La zone centrale affiche la carte interactive avec les éléments de simulation.
+
+\subsubsection{Éléments Visuels}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Élément} & \textbf{Description} \\
+\midrule
+\textbf{Fond de carte} & Tuiles OpenStreetMap téléchargées automatiquement et mises en cache \\
+\textbf{Véhicules} & Rectangles colorés (noir, gris, blanc, bleu nuit) représentant chaque véhicule \\
+\textbf{Connexions V2V} & Lignes vertes entre véhicules pouvant communiquer \\
+\textbf{Rayons de transmission} & Cercles bleus semi-transparents autour de chaque véhicule \\
+\textbf{Véhicule sélectionné} & Bordure jaune épaisse autour du véhicule sélectionné \\
+\bottomrule
+\end{tabular}
+\caption{Éléments visuels de la carte}
+\end{table}
+
+\subsubsection{Couleurs des Véhicules}
+
+Les véhicules sont représentés par des rectangles de 4 couleurs différentes, attribuées aléatoirement :
+
+\begin{itemize}
+    \item \textbf{Noir} : \texttt{\#000000}
+    \item \textbf{Gris} : \texttt{\#808080}
+    \item \textbf{Blanc} : \texttt{\#FFFFFF}
+    \item \textbf{Bleu Nuit} : \texttt{\#191970} (Midnight Blue)
+\end{itemize}
+
+\subsubsection{Rayons de Transmission}
+
+Chaque véhicule possède un rayon de transmission aléatoire parmi les valeurs suivantes :
+
+\begin{itemize}
+    \item 100 mètres
+    \item 200 mètres
+    \item 300 mètres
+    \item 400 mètres
+    \item 500 mètres
+\end{itemize}
+
+\begin{tipbox}
+Le rayon de transmission détermine la portée des communications V2V. Deux véhicules sont connectés si la distance entre eux est inférieure au rayon maximal des deux véhicules.
+\end{tipbox}
+
+\subsection{Barre de Statut (Bas)}
+
+La barre de statut affiche en temps réel les métriques de la simulation :
+
+\begin{itemize}
+    \item \textbf{Vehicles:} Nombre de véhicules actifs dans la simulation
+    \item \textbf{Connections:} Nombre de liens V2V établis
+    \item \textbf{Time:} Temps de simulation écoulé (en secondes)
+\end{itemize}
+
+\subsection{Panneau d'Information du Véhicule}
+
+Lorsqu'un véhicule est sélectionné, un panneau d'information apparaît en bas à droite de l'écran :
+
+\begin{tcolorbox}[colback=white, colframe=gray, width=0.5\textwidth]
+\begin{verbatim}
+Selected Vehicle #42
+─────────────────────
+Position: (47.7456, 7.3389)
+Speed: 54.2 km/h
+Direction: 125.3°
+TX Radius: 300 m
+Connections: 5
+\end{verbatim}
+\end{tcolorbox}
+
+% ============================================================================
+% CONTRÔLES ET NAVIGATION
+% ============================================================================
+\section{Contrôles et Navigation}
+
+\subsection{Contrôles Souris}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lp{10cm}}
+\toprule
+\textbf{Action} & \textbf{Effet} \\
+\midrule
+\textbf{Clic gauche + Glisser} & Déplacement (pan) de la carte \\
+\textbf{Molette vers le haut} & Zoom avant (agrandissement) \\
+\textbf{Molette vers le bas} & Zoom arrière (réduction) \\
+\textbf{Clic gauche sur véhicule} & Sélection du véhicule \\
+\bottomrule
+\end{tabular}
+\caption{Contrôles souris}
+\end{table}
+
+\subsection{Raccourcis Clavier}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{8cm}}
+\toprule
+\textbf{Touche} & \textbf{Action} & \textbf{Description} \\
+\midrule
+\textbf{+} ou \textbf{=} & Zoom avant & Augmente le niveau de zoom \\
+\textbf{-} ou \textbf{\_} & Zoom arrière & Diminue le niveau de zoom \\
+\textbf{↑} (Flèche haut) & Déplacer vers le haut & Déplace la vue vers le nord \\
+\textbf{↓} (Flèche bas) & Déplacer vers le bas & Déplace la vue vers le sud \\
+\textbf{←} (Flèche gauche) & Véhicule précédent & Sélectionne le véhicule le plus proche à gauche \\
+\textbf{→} (Flèche droite) & Véhicule suivant & Sélectionne le véhicule le plus proche à droite \\
+\textbf{H} & Retour maison & Recentre la carte sur Mulhouse (position initiale) \\
+\textbf{V} & Toggle véhicules & Affiche/masque les véhicules \\
+\textbf{C} & Toggle connexions & Affiche/masque les connexions V2V \\
+\textbf{R} & Toggle routes & Affiche/masque le graphe routier \\
+\textbf{T} & Toggle rayons TX & Affiche/masque les rayons de transmission \\
+\textbf{Échap} & Désélectionner & Annule la sélection du véhicule courant \\
+\bottomrule
+\end{tabular}
+\caption{Raccourcis clavier}
+\end{table}
+
+\subsection{Navigation entre Véhicules}
+
+La navigation par clavier permet de parcourir les véhicules de manière intuitive :
+
+\begin{enumerate}
+    \item \textbf{Flèche gauche (←)} : Sélectionne le véhicule le plus proche situé à \textbf{gauche} du véhicule actuel
+    \item \textbf{Flèche droite (→)} : Sélectionne le véhicule le plus proche situé à \textbf{droite} du véhicule actuel
+\end{enumerate}
+
+\begin{warningbox}
+Si aucun véhicule n'est sélectionné, les touches gauche/droite sélectionnent le premier véhicule visible à l'écran.
+\end{warningbox}
+
+% ============================================================================
+% FONCTIONNEMENT DE LA SIMULATION
+% ============================================================================
+\section{Fonctionnement de la Simulation}
+
+\subsection{Cycle de Simulation}
+
+La simulation fonctionne selon le cycle suivant :
+
+\begin{enumerate}
+    \item \textbf{Initialisation} : Création des véhicules à des positions aléatoires sur le réseau routier
+    \item \textbf{Mise à jour des positions} : Chaque véhicule se déplace selon sa vitesse et direction
+    \item \textbf{Calcul des connexions} : Le graphe d'interférences est mis à jour périodiquement
+    \item \textbf{Rendu graphique} : L'affichage est rafraîchi à 30 FPS
+\end{enumerate}
+
+\subsection{Modèle de Véhicule}
+
+Chaque véhicule possède les attributs suivants :
+
+\begin{table}[H]
+\centering
+\begin{tabular}{llp{7cm}}
+\toprule
+\textbf{Attribut} & \textbf{Type} & \textbf{Description} \\
+\midrule
+ID & Entier & Identifiant unique du véhicule \\
+Position & (lat, lon) & Coordonnées GPS en degrés décimaux \\
+Vitesse & m/s & Vitesse de déplacement (10-25 m/s, soit 36-90 km/h) \\
+Direction & Radians & Angle de déplacement (0-2$\pi$) \\
+Rayon TX & Mètres & Rayon de transmission radio (100-500 m) \\
+Actif & Booléen & État du véhicule dans la simulation \\
+\bottomrule
+\end{tabular}
+\caption{Attributs d'un véhicule}
+\end{table}
+
+\subsection{Modèle de Communication V2V}
+
+\subsubsection{Critère de Connexion}
+
+Deux véhicules $V_1$ et $V_2$ sont considérés comme \textbf{connectés} si :
+
+\begin{equation}
+d(V_1, V_2) \leq \max(R_1, R_2)
+\end{equation}
+
+Où :
+\begin{itemize}
+    \item $d(V_1, V_2)$ est la distance euclidienne entre les deux véhicules (en mètres)
+    \item $R_1$ est le rayon de transmission de $V_1$
+    \item $R_2$ est le rayon de transmission de $V_2$
+\end{itemize}
+
+\subsubsection{Calcul de Distance}
+
+La distance entre deux véhicules est calculée en utilisant une approximation plane :
+
+\begin{equation}
+d = \sqrt{(\Delta lat \times 111320)^2 + (\Delta lon \times 111320)^2}
+\end{equation}
+
+Où 111320 mètres correspond approximativement à 1 degré de latitude/longitude à nos latitudes.
+
+\subsection{Graphe d'Interférences}
+
+Le graphe d'interférences est une structure de données qui maintient les connexions entre véhicules :
+
+\begin{itemize}
+    \item \textbf{Nœuds} : Chaque véhicule est un nœud du graphe
+    \item \textbf{Arêtes} : Une arête existe entre deux véhicules s'ils peuvent communiquer
+    \item \textbf{Mise à jour} : Le graphe est recalculé périodiquement (toutes les 15-30 frames selon le nombre de véhicules)
+\end{itemize}
+
+\begin{notebox}
+Pour optimiser les performances, la fréquence de mise à jour du graphe d'interférences s'adapte automatiquement au nombre de véhicules :
+\begin{itemize}
+    \item < 500 véhicules : mise à jour toutes les 15 frames
+    \item 500-1000 véhicules : mise à jour toutes les 15 frames
+    \item 1000-1500 véhicules : mise à jour toutes les 20 frames
+    \item > 1500 véhicules : mise à jour toutes les 30 frames
+\end{itemize}
+\end{notebox}
+
+% ============================================================================
+% ARCHITECTURE TECHNIQUE
+% ============================================================================
+\section{Architecture Technique}
+
+\subsection{Structure du Projet}
+
+\begin{lstlisting}[language=bash, caption={Arborescence du projet}]
+v2v-simulator/
+├── include/              # Fichiers d'en-tête (.hpp)
+│   ├── core/             # Vehicle, SimulationEngine
+│   ├── network/          # RoadGraph, InterferenceGraph, PathPlanner
+│   ├── visualization/    # MainWindow, MapView
+│   ├── data/             # OSMParser, TileManager, GeometryUtils
+│   └── utils/            # Logger
+├── src/                  # Implémentations (.cpp)
+├── data/                 # Données OSM (Mulhouse, Alsace)
+├── docs/                 # Documentation
+├── osm_cache/            # Cache des tuiles OSM (généré)
+├── CMakeLists.txt        # Configuration CMake
+└── run_optimized.sh      # Script de lancement
+\end{lstlisting}
+
+\subsection{Modules Principaux}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Module} & \textbf{Composants} & \textbf{Technologies} \\
+\midrule
+Core & Vehicle, SimulationEngine & Qt6, C++20 \\
+Network & RoadGraph, InterferenceGraph, PathPlanner & Boost.Graph, R-tree \\
+Visualization & MainWindow, MapView & Qt6, QPainter \\
+Data & OSMParser, TileManager, GeometryUtils & QXmlStreamReader, CURL, SQLite \\
+Utils & Logger & Qt6 \\
+\bottomrule
+\end{tabular}
+\caption{Modules du système}
+\end{table}
+
+\subsection{Diagramme de Classes Simplifié}
+
+\begin{verbatim}
+                    ┌─────────────────┐
+                    │   MainWindow    │
+                    │  (QMainWindow)  │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┼──────────────┐
+              ▼              ▼              ▼
+     ┌────────────┐  ┌──────────────┐  ┌──────────┐
+     │  MapView   │  │ Simulation   │  │  Status  │
+     │ (QWidget)  │  │   Engine     │  │   Bar    │
+     └────────────┘  └──────┬───────┘  └──────────┘
+                            │
+         ┌──────────────────┼──────────────────┐
+         ▼                  ▼                  ▼
+   ┌───────────┐     ┌─────────────┐    ┌───────────┐
+   │ RoadGraph │     │ Interference│    │  Vehicle  │
+   │           │     │   Graph     │    │           │
+   └───────────┘     └─────────────┘    └───────────┘
+\end{verbatim}
+
+% ============================================================================
+% PERFORMANCES ET OPTIMISATION
+% ============================================================================
+\section{Performances et Optimisation}
+
+\subsection{Optimisations Implémentées}
+
+\begin{enumerate}
+    \item \textbf{Frustum Culling} : Seuls les véhicules visibles à l'écran sont dessinés
+    \item \textbf{Mise à jour adaptative} : La fréquence de calcul du graphe d'interférences s'adapte à la charge
+    \item \textbf{Cache de tuiles} : Les tuiles OSM sont mises en cache localement (SQLite)
+    \item \textbf{Limitation du rendu} : Maximum 2000 véhicules affichés simultanément
+    \item \textbf{Limitation des connexions} : Maximum 1000 lignes de connexion dessinées
+\end{enumerate}
+
+\subsection{Recommandations d'Utilisation}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Nombre de véhicules} & \textbf{Performance attendue} & \textbf{Recommandation} \\
+\midrule
+< 500 & Excellente (60 FPS) & Toutes options activées \\
+500 - 1000 & Bonne (30-60 FPS) & Connexions activables \\
+1000 - 2000 & Acceptable (20-30 FPS) & Désactiver rayons TX \\
+> 2000 & Variable & Désactiver connexions \\
+\bottomrule
+\end{tabular}
+\caption{Performances selon le nombre de véhicules}
+\end{table}
+
+\begin{warningbox}
+Au-delà de 2000 véhicules, il est recommandé de désactiver l'affichage des connexions (touche \textbf{C}) et des rayons de transmission (touche \textbf{T}) pour maintenir des performances acceptables.
+\end{warningbox}
+
+% ============================================================================
+% DÉPANNAGE
+% ============================================================================
+\section{Dépannage}
+
+\subsection{Problèmes Courants}
+
+\begin{longtable}{p{5cm}p{9cm}}
+\toprule
+\textbf{Problème} & \textbf{Solution} \\
+\midrule
+\endhead
+La carte n'affiche pas de tuiles & Vérifiez votre connexion Internet. Les tuiles sont téléchargées depuis les serveurs OpenStreetMap. Vérifiez aussi que le dossier \texttt{osm\_cache} est accessible en écriture. \\
+\midrule
+Les véhicules n'apparaissent pas & Appuyez sur \textbf{V} pour activer l'affichage des véhicules. Vérifiez que la simulation est démarrée (bouton Start). \\
+\midrule
+L'application est lente & Réduisez le nombre de véhicules. Désactivez les connexions (C) et les rayons (T). \\
+\midrule
+Compilation échoue & Vérifiez que toutes les dépendances sont installées. Consultez les messages d'erreur CMake. \\
+\midrule
+Pas de connexions visibles & Appuyez sur \textbf{C} pour activer l'affichage des connexions. Les connexions ne s'affichent que si moins de 300 véhicules sont visibles. \\
+\midrule
+Le zoom ne fonctionne pas & Cliquez sur la carte pour lui donner le focus, puis utilisez la molette. \\
+\bottomrule
+\caption{Guide de dépannage}
+\end{longtable}
+
+\subsection{Fichiers de Log}
+
+Les logs de l'application sont enregistrés dans le fichier \texttt{v2v\_simulator.log} situé dans le répertoire d'exécution.
+
+\begin{lstlisting}[language=bash, caption={Consultation des logs}]
+# Afficher les dernières lignes du log
+tail -f v2v_simulator.log
+
+# Rechercher des erreurs
+grep -i error v2v_simulator.log
+\end{lstlisting}
+
+% ============================================================================
+% ANNEXES
+% ============================================================================
+\section{Annexes}
+
+\subsection{Formule de Haversine}
+
+Pour les calculs de distance géographique précis, la formule de Haversine est utilisée :
+
+\begin{equation}
+d = 2R \cdot \arcsin\left(\sqrt{\sin^2\left(\frac{\phi_2-\phi_1}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\lambda_2-\lambda_1}{2}\right)}\right)
+\end{equation}
+
+Où :
+\begin{itemize}
+    \item $R$ = rayon de la Terre (6371 km)
+    \item $\phi_1, \phi_2$ = latitudes en radians
+    \item $\lambda_1, \lambda_2$ = longitudes en radians
+\end{itemize}
+
+\subsection{Conversion Coordonnées}
+
+\subsubsection{Latitude/Longitude vers Pixels (Web Mercator)}
+
+\begin{equation}
+x = \frac{(\lambda + 180)}{360} \times 2^{zoom} \times 256
+\end{equation}
+
+\begin{equation}
+y = \left(1 - \frac{\ln(\tan(\phi) + \sec(\phi))}{\pi}\right) \times \frac{2^{zoom} \times 256}{2}
+\end{equation}
+
+\subsection{Références}
+
+\begin{enumerate}
+    \item OpenStreetMap : \url{https://www.openstreetmap.org}
+    \item Qt Documentation : \url{https://doc.qt.io/qt-6/}
+    \item Boost.Graph : \url{https://www.boost.org/doc/libs/release/libs/graph/}
+    \item IEEE 802.11p (WAVE) : Standard pour les communications V2V
+    \item ETSI ITS-G5 : Standard européen pour les systèmes de transport intelligents
+\end{enumerate}
+
+% ============================================================================
+% CONCLUSION
+% ============================================================================
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+
+Le V2V Simulator offre une plateforme complète pour l'étude et la visualisation des communications véhicule-à-véhicule. Son interface intuitive, combinée à des performances optimisées, permet d'explorer différents scénarios de densité de véhicules et d'analyser leur impact sur la connectivité du réseau.
+
+Pour toute question ou contribution, n'hésitez pas à ouvrir une issue sur le dépôt GitHub :
+
+\begin{center}
+\url{https://github.com/maliko18/v2v-simulation}
+\end{center}
+
+\vspace{1cm}
+\begin{center}
+\textcolor{v2vprimary}{\Large\textbf{Bon usage du V2V Simulator !}}
+\end{center}
+
+\end{document}

@@ -99,6 +99,15 @@ private:
     bool m_showTransmissionRadius;  // Afficher les cercles bleus de transmission
     bool m_vsyncEnabled;
     bool m_antialiasingEnabled;
+    
+    // Sélection de véhicule
+    int m_selectedVehicleId;  // -1 = aucun véhicule sélectionné
+    
+    // Méthodes privées pour sélection
+    int findVehicleAtPosition(const QPointF& screenPos) const;
+    void selectNextVehicle();
+    void selectPreviousVehicle();
+    void drawVehicleInfo(QPainter& painter);
 };
 
 } // namespace visualization

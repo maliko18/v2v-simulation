@@ -144,20 +144,6 @@ void MainWindow::createUI() {
     line4->setStyleSheet("background-color: #555;");
     leftLayout->addWidget(line4);
     
-    // Transmission radius
-    QLabel* radiusLabel = new QLabel("TRANSMISSION RADIUS", leftPanel);
-    radiusLabel->setStyleSheet("font-weight: bold; color: #4CAF50;");
-    leftLayout->addWidget(radiusLabel);
-    
-    m_transmissionRadiusSpinBox = new QSpinBox(leftPanel);
-    m_transmissionRadiusSpinBox->setMinimum(100);
-    m_transmissionRadiusSpinBox->setMaximum(500);
-    m_transmissionRadiusSpinBox->setValue(300);
-    m_transmissionRadiusSpinBox->setSuffix(" m");
-    m_transmissionRadiusSpinBox->setStyleSheet("QSpinBox { background-color: #3b3b3b; color: white; padding: 8px; border: 1px solid #555; border-radius: 5px; font-size: 14px; }"
-                                              "QSpinBox::up-button, QSpinBox::down-button { background-color: #4CAF50; }");
-    leftLayout->addWidget(m_transmissionRadiusSpinBox);
-    
     // Spacer pour pousser tout vers le haut
     leftLayout->addStretch();
     
@@ -200,8 +186,6 @@ void MainWindow::connectSignals() {
     connect(m_timeScaleSlider, &QSlider::valueChanged, this, &MainWindow::onTimeScaleChanged);
     connect(m_vehicleCountSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
             this, &MainWindow::onVehicleCountChanged);
-    connect(m_transmissionRadiusSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
-            this, &MainWindow::onTransmissionRadiusChanged);
     
     // Update status bar on each simulation tick
     connect(m_engine, &core::SimulationEngine::tick, this, [this]() {
@@ -271,10 +255,6 @@ void MainWindow::onVehicleCountChanged(int value) {
         // Only allow changing when stopped
         LOG_INFO(QString("Vehicle count set to: %1").arg(value));
     }
-}
-
-void MainWindow::onTransmissionRadiusChanged(int value) {
-    LOG_INFO(QString("Transmission radius set to: %1m").arg(value));
 }
 
 void MainWindow::updateControls() {

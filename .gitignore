@@ -71,3 +71,4 @@ vgcore.*
 *.tar.gz
 *.zip
 data/alsace.osm
+osm_cache/

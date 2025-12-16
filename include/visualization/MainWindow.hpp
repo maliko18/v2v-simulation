@@ -44,7 +44,6 @@ private slots:
     // Paramètres
     void onTimeScaleChanged(int value);
     void onVehicleCountChanged(int value);
-    void onTransmissionRadiusChanged(int value);
     
     // Updates
     void updateControls();
@@ -71,7 +70,6 @@ private:
     QSlider* m_timeScaleSlider;
     QLabel* m_timeScaleLabel;
     QSpinBox* m_vehicleCountSpinBox;
-    QSpinBox* m_transmissionRadiusSpinBox;
     
     // Status bar widgets
     QLabel* m_statusVehicles;

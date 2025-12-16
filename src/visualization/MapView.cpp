@@ -24,9 +24,9 @@ namespace visualization {
 MapView::MapView(QWidget* parent)
     : QWidget(parent)
     , m_engine(nullptr)
-    , m_centerLat(48.08)  // Centre de l'Alsace (Colmar)
-    , m_centerLon(7.36)
-    , m_zoomLevel(10)  // Zoom réduit pour voir toute l'Alsace
+    , m_centerLat(47.75)  // Centre de Mulhouse
+    , m_centerLon(7.34)
+    , m_zoomLevel(13)  // Zoom plus rapproché pour Mulhouse
     , m_offset(0, 0)
     , m_scale(1.0)
     , m_isDragging(false)
@@ -36,6 +36,7 @@ MapView::MapView(QWidget* parent)
     , m_showTransmissionRadius(true)  // Cercles bleus activés par défaut (toggle avec 'T')
     , m_vsyncEnabled(false)
     , m_antialiasingEnabled(false)  // Désactivé par défaut pour meilleures performances
+    , m_selectedVehicleId(-1)  // Aucun véhicule sélectionné au départ
 {
     // Configuration du widget pour performance optimale
     setMinimumSize(800, 600);
@@ -58,10 +59,10 @@ MapView::MapView(QWidget* parent)
                 }
             });
     
-    // Précharger les tuiles autour du centre de l'Alsace au démarrage
+    // Précharger les tuiles autour du centre de Mulhouse au démarrage
     m_tileManager->preloadArea(m_centerLat, m_centerLon, m_zoomLevel, 3);
     
-    LOG_INFO("MapView created with OSM tile support (Alsace region)");
+    LOG_INFO("MapView created with OSM tile support (Mulhouse)");
 }
 
 MapView::~MapView() {
@@ -179,8 +180,8 @@ void MapView::paintEvent(QPaintEvent* event) {
             vehicleIdToScreenPos[vehicle->getId()] = screenPos;
         }
         
-        // Dessiner les rayons de transmission - DÉSACTIVÉ si trop de véhicules
-        if (m_showTransmissionRadius && visibleVehicles.size() < 200) {
+        // Dessiner les rayons de transmission - TOUJOURS VISIBLE si activé
+        if (m_showTransmissionRadius) {
             painter.setPen(QPen(QColor(100, 150, 255, 80), 1.5));
             painter.setBrush(QColor(100, 150, 255, 30));
 
@@ -191,8 +192,8 @@ void MapView::paintEvent(QPaintEvent* event) {
             }
         }
         
-        // Dessiner les connexions V2V - LIMITÉ pour éviter freeze
-        if (m_showConnections && visibleVehicles.size() < 300) {
+        // Dessiner les connexions V2V - TOUJOURS VISIBLE si activé
+        if (m_showConnections) {
             auto* interferenceGraph = m_engine->getInterferenceGraph();
             if (interferenceGraph) {
                 // Limite adaptative basée sur le nombre de véhicules
@@ -233,27 +234,67 @@ void MapView::paintEvent(QPaintEvent* event) {
             }
         }
         
-        // Dessiner les véhicules - taille adaptative selon le zoom
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 50, 50));
-        
-        // Taille du véhicule adaptée au zoom pour être toujours visible
-        int vehicleSize;
-        if (m_zoomLevel <= 8) {
-            vehicleSize = 6;  // Plus grand aux zooms faibles
-        } else if (m_zoomLevel <= 10) {
-            vehicleSize = 5;
+        // Dessiner les véhicules - rectangles colorés (4 couleurs différentes)
+        // Taille du véhicule adaptée au zoom (réduite de 20%)
+        double vehicleWidth, vehicleHeight;
+        if (m_zoomLevel <= 10) {
+            vehicleWidth = 9.6;   // 12 * 0.8
+            vehicleHeight = 6.4;  // 8 * 0.8
         } else if (m_zoomLevel <= 12) {
-            vehicleSize = 4;
+            vehicleWidth = 11.2;  // 14 * 0.8
+            vehicleHeight = 7.2;  // 9 * 0.8
         } else if (m_zoomLevel <= 14) {
-            vehicleSize = 4;
+            vehicleWidth = 12.8;  // 16 * 0.8
+            vehicleHeight = 8.0;  // 10 * 0.8
         } else {
-            vehicleSize = 5;  // Plus grand aux zooms élevés
+            vehicleWidth = 14.4;  // 18 * 0.8
+            vehicleHeight = 9.6;  // 12 * 0.8
         }
 
+        // 4 couleurs : noir, gris, blanc, bleu nuit
+        static const QColor vehicleColors[4] = {
+            QColor(20, 20, 20),      // Noir
+            QColor(128, 128, 128),   // Gris
+            QColor(245, 245, 245),   // Blanc
+            QColor(25, 25, 112)      // Bleu nuit (Midnight Blue)
+        };
+
         for (const auto& [vehicle, screenPos] : visibleVehicles) {
-            // Simple cercle sans rotation ni flèche
-            painter.drawEllipse(screenPos, vehicleSize, vehicleSize);
+            // Couleur basée sur l'ID du véhicule (mod 4)
+            QColor color = vehicleColors[vehicle->getId() % 4];
+            
+            // Direction du véhicule (radians)
+            double direction = vehicle->getDirection();
+            
+            // Vérifier si ce véhicule est sélectionné
+            bool isSelected = (vehicle->getId() == m_selectedVehicleId);
+            
+            // Sauvegarder l'état du painter
+            painter.save();
+            
+            // Translater et tourner pour orienter le rectangle
+            painter.translate(screenPos);
+            painter.rotate(direction * 180.0 / M_PI);  // Convertir radians en degrés
+            
+            // Dessiner le rectangle avec contour (plus épais si sélectionné)
+            if (isSelected) {
+                // Véhicule sélectionné : contour jaune épais + halo
+                painter.setPen(QPen(QColor(255, 215, 0), 3));  // Or
+                painter.setBrush(color);
+                painter.drawRect(-vehicleWidth/2 - 2, -vehicleHeight/2 - 2, vehicleWidth + 4, vehicleHeight + 4);
+            } else {
+                painter.setPen(QPen(Qt::black, 1.5));
+                painter.setBrush(color);
+                painter.drawRect(-vehicleWidth/2, -vehicleHeight/2, vehicleWidth, vehicleHeight);
+            }
+            
+            // Restaurer l'état du painter
+            painter.restore();
+        }
+        
+        // Dessiner les informations du véhicule sélectionné
+        if (m_selectedVehicleId >= 0) {
+            drawVehicleInfo(painter);
         }
     }
     
@@ -374,18 +415,6 @@ void MapView::paintEvent(QPaintEvent* event) {
     painter.setFont(QFont("Arial", 9));
     QString controls = "🖱️ Clic: pan | Molette: zoom | ⌨️ Flèches/+/- | H: home | V: véhicules | C: connexions | R: routes";
     painter.drawText(10, height() - 10, controls);
-    
-    // Compteur de véhicules si activé
-    if (m_showVehicles && m_engine) {
-        int vehicleCount = m_engine->getActiveVehicleCount();
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(0, 150, 0, 180));
-        painter.drawRoundedRect(width() - 155, 5, 150, 40, 5, 5);
-        
-        painter.setPen(Qt::white);
-        painter.setFont(QFont("Arial", 11, QFont::Bold));
-        painter.drawText(width() - 145, 25, QString("🚗 %1 véhicules").arg(vehicleCount));
-    }
 }
 
 
@@ -498,33 +527,41 @@ std::pair<double, double> MapView::screenToLatLon(const QPointF& screen) const {
 }
 
 double MapView::metersToPixels(double meters, double latitude) const {
-    // Convertir des mètres en pixels à la latitude donnée
-    // À l'équateur: 1 degré de latitude ≈ 111,320 mètres
-    // La projection Web Mercator conserve les distances à l'équateur mais les étire aux pôles
+    // Convertir des mètres en pixels
+    // Utiliser la même logique que InterferenceGraph pour cohérence
     
-    // Approximation: utiliser la latitude moyenne pour le calcul
-    // Plus précis: utiliser la latitude exacte du véhicule
-    const double metersPerDegreeLat = 111320.0;  // À l'équateur
-    const double metersPerDegreeLon = 111320.0 * std::cos(latitude * M_PI / 180.0);
-    
-    // Utiliser la moyenne pour un cercle approximatif
-    double avgMetersPerDegree = (metersPerDegreeLat + metersPerDegreeLon) / 2.0;
+    // 1 degré de latitude = 111320 mètres (constant)
+    const double metersPerDegreeLat = 111320.0;
     
     // Convertir mètres en degrés
-    double degrees = meters / avgMetersPerDegree;
+    double degrees = meters / metersPerDegreeLat;
     
-    // Convertir degrés en pixels selon le zoom
-    double zoom = std::pow(2.0, m_zoomLevel);
-    double pixelsPerDegree = 256.0 * zoom / 360.0;
+    // Convertir degrés en pixels selon le niveau de zoom
+    // Au niveau z, il y a 2^z tuiles de 256 pixels sur 360°
+    double n = std::pow(2.0, m_zoomLevel);
+    double pixelsPerDegree = (256.0 * n) / 360.0;
     
     return degrees * pixelsPerDegree;
 }
 
 void MapView::mousePressEvent(QMouseEvent* event) {
     if (event->button() == Qt::LeftButton) {
+        // Essayer de sélectionner un véhicule d'abord
+        int vehicleId = findVehicleAtPosition(event->pos());
+        if (vehicleId >= 0) {
+            m_selectedVehicleId = vehicleId;
+            update();
+            return;  // Ne pas commencer le drag si on clique sur un véhicule
+        }
+        
+        // Sinon, commencer le drag
         m_isDragging = true;
         m_lastMousePos = event->pos();
         setCursor(Qt::ClosedHandCursor);
+    } else if (event->button() == Qt::RightButton) {
+        // Désélectionner avec clic droit
+        m_selectedVehicleId = -1;
+        update();
     }
 }
 
@@ -601,21 +638,55 @@ void MapView::keyPressEvent(QKeyEvent* event) {
     bool needsUpdate = false;
     
     switch (event->key()) {
-        // Déplacement avec flèches
+        // Navigation véhicules avec flèches (si pas de modificateur) ou Page Up/Down
         case Qt::Key_Left:
-            m_centerLon -= panSpeed;
-            needsUpdate = true;
+            if (event->modifiers() == Qt::NoModifier && m_selectedVehicleId >= 0) {
+                selectPreviousVehicle();
+                needsUpdate = true;
+            } else {
+                m_centerLon -= panSpeed;
+                needsUpdate = true;
+            }
             break;
         case Qt::Key_Right:
-            m_centerLon += panSpeed;
-            needsUpdate = true;
+            if (event->modifiers() == Qt::NoModifier && m_selectedVehicleId >= 0) {
+                selectNextVehicle();
+                needsUpdate = true;
+            } else {
+                m_centerLon += panSpeed;
+                needsUpdate = true;
+            }
             break;
         case Qt::Key_Up:
-            m_centerLat += panSpeed;
+            if (event->modifiers() == Qt::ShiftModifier) {
+                selectPreviousVehicle();
+            } else {
+                m_centerLat += panSpeed;
+            }
             needsUpdate = true;
             break;
         case Qt::Key_Down:
-            m_centerLat -= panSpeed;
+            if (event->modifiers() == Qt::ShiftModifier) {
+                selectNextVehicle();
+            } else {
+                m_centerLat -= panSpeed;
+            }
+            needsUpdate = true;
+            break;
+            
+        // Page Up/Down pour naviguer entre véhicules
+        case Qt::Key_PageUp:
+            selectPreviousVehicle();
+            needsUpdate = true;
+            break;
+        case Qt::Key_PageDown:
+            selectNextVehicle();
+            needsUpdate = true;
+            break;
+            
+        // Escape pour désélectionner
+        case Qt::Key_Escape:
+            m_selectedVehicleId = -1;
             needsUpdate = true;
             break;
             
@@ -681,6 +752,286 @@ void MapView::keyPressEvent(QKeyEvent* event) {
     if (needsUpdate) {
         update();
     }
+}
+
+// ============================================================================
+// Fonctions de sélection de véhicule
+// ============================================================================
+
+int MapView::findVehicleAtPosition(const QPointF& screenPos) const {
+    if (!m_engine) return -1;
+    
+    const auto& vehicles = m_engine->getVehicles();
+    const double clickRadius = 20.0;  // Rayon de clic en pixels
+    
+    for (const auto& vehicle : vehicles) {
+        if (!vehicle->isActive()) continue;
+        
+        QPointF vehicleScreen = latLonToScreen(vehicle->getLatitude(), vehicle->getLongitude());
+        double dist = std::sqrt(std::pow(screenPos.x() - vehicleScreen.x(), 2) +
+                               std::pow(screenPos.y() - vehicleScreen.y(), 2));
+        
+        if (dist <= clickRadius) {
+            return vehicle->getId();
+        }
+    }
+    
+    return -1;  // Aucun véhicule trouvé
+}
+
+void MapView::selectNextVehicle() {
+    if (!m_engine) return;
+    
+    const auto& vehicles = m_engine->getVehicles();
+    if (vehicles.empty()) return;
+    
+    if (m_selectedVehicleId < 0) {
+        // Aucun véhicule sélectionné, sélectionner le premier visible
+        m_selectedVehicleId = vehicles[0]->getId();
+        for (const auto& v : vehicles) {
+            if (v->getId() == m_selectedVehicleId) {
+                setCenter(v->getLatitude(), v->getLongitude());
+                break;
+            }
+        }
+        return;
+    }
+    
+    // Trouver la position écran du véhicule actuellement sélectionné
+    QPointF currentScreenPos;
+    core::Vehicle* currentVehicle = nullptr;
+    for (const auto& v : vehicles) {
+        if (v->getId() == m_selectedVehicleId) {
+            currentVehicle = v.get();
+            currentScreenPos = latLonToScreen(v->getLatitude(), v->getLongitude());
+            break;
+        }
+    }
+    
+    if (!currentVehicle) return;
+    
+    // Chercher le véhicule le plus proche à DROITE (screenX plus grand)
+    int bestId = -1;
+    double bestScore = std::numeric_limits<double>::max();
+    
+    for (const auto& v : vehicles) {
+        if (v->getId() == m_selectedVehicleId) continue;
+        
+        QPointF screenPos = latLonToScreen(v->getLatitude(), v->getLongitude());
+        double dx = screenPos.x() - currentScreenPos.x();
+        double dy = screenPos.y() - currentScreenPos.y();
+        
+        // Seulement les véhicules à droite (dx > 0)
+        if (dx > 5.0) {  // Au moins 5 pixels à droite
+            // Score = distance, mais pénaliser fortement les véhicules trop haut/bas
+            double score = std::abs(dx) + std::abs(dy) * 2.0;
+            if (score < bestScore) {
+                bestScore = score;
+                bestId = v->getId();
+            }
+        }
+    }
+    
+    // Si aucun véhicule à droite, wrap vers le plus à gauche
+    if (bestId < 0) {
+        double leftMostX = std::numeric_limits<double>::max();
+        for (const auto& v : vehicles) {
+            QPointF screenPos = latLonToScreen(v->getLatitude(), v->getLongitude());
+            if (screenPos.x() < leftMostX) {
+                leftMostX = screenPos.x();
+                bestId = v->getId();
+            }
+        }
+    }
+    
+    if (bestId >= 0) {
+        m_selectedVehicleId = bestId;
+        // Centrer sur le nouveau véhicule
+        for (const auto& v : vehicles) {
+            if (v->getId() == m_selectedVehicleId) {
+                setCenter(v->getLatitude(), v->getLongitude());
+                break;
+            }
+        }
+    }
+}
+
+void MapView::selectPreviousVehicle() {
+    if (!m_engine) return;
+    
+    const auto& vehicles = m_engine->getVehicles();
+    if (vehicles.empty()) return;
+    
+    if (m_selectedVehicleId < 0) {
+        // Aucun véhicule sélectionné, sélectionner le dernier
+        m_selectedVehicleId = vehicles.back()->getId();
+        for (const auto& v : vehicles) {
+            if (v->getId() == m_selectedVehicleId) {
+                setCenter(v->getLatitude(), v->getLongitude());
+                break;
+            }
+        }
+        return;
+    }
+    
+    // Trouver la position écran du véhicule actuellement sélectionné
+    QPointF currentScreenPos;
+    core::Vehicle* currentVehicle = nullptr;
+    for (const auto& v : vehicles) {
+        if (v->getId() == m_selectedVehicleId) {
+            currentVehicle = v.get();
+            currentScreenPos = latLonToScreen(v->getLatitude(), v->getLongitude());
+            break;
+        }
+    }
+    
+    if (!currentVehicle) return;
+    
+    // Chercher le véhicule le plus proche à GAUCHE (screenX plus petit)
+    int bestId = -1;
+    double bestScore = std::numeric_limits<double>::max();
+    
+    for (const auto& v : vehicles) {
+        if (v->getId() == m_selectedVehicleId) continue;
+        
+        QPointF screenPos = latLonToScreen(v->getLatitude(), v->getLongitude());
+        double dx = currentScreenPos.x() - screenPos.x();
+        double dy = screenPos.y() - currentScreenPos.y();
+        
+        // Seulement les véhicules à gauche (dx > 0 signifie screenPos.x < current)
+        if (dx > 5.0) {  // Au moins 5 pixels à gauche
+            // Score = distance, mais pénaliser fortement les véhicules trop haut/bas
+            double score = std::abs(dx) + std::abs(dy) * 2.0;
+            if (score < bestScore) {
+                bestScore = score;
+                bestId = v->getId();
+            }
+        }
+    }
+    
+    // Si aucun véhicule à gauche, wrap vers le plus à droite
+    if (bestId < 0) {
+        double rightMostX = -std::numeric_limits<double>::max();
+        for (const auto& v : vehicles) {
+            QPointF screenPos = latLonToScreen(v->getLatitude(), v->getLongitude());
+            if (screenPos.x() > rightMostX) {
+                rightMostX = screenPos.x();
+                bestId = v->getId();
+            }
+        }
+    }
+    
+    if (bestId >= 0) {
+        m_selectedVehicleId = bestId;
+        // Centrer sur le nouveau véhicule
+        for (const auto& v : vehicles) {
+            if (v->getId() == m_selectedVehicleId) {
+                setCenter(v->getLatitude(), v->getLongitude());
+                break;
+            }
+        }
+    }
+}
+
+void MapView::drawVehicleInfo(QPainter& painter) {
+    if (!m_engine || m_selectedVehicleId < 0) return;
+    
+    // Trouver le véhicule sélectionné
+    const auto& vehicles = m_engine->getVehicles();
+    core::Vehicle* selectedVehicle = nullptr;
+    
+    for (const auto& v : vehicles) {
+        if (v->getId() == m_selectedVehicleId) {
+            selectedVehicle = v.get();
+            break;
+        }
+    }
+    
+    if (!selectedVehicle) {
+        m_selectedVehicleId = -1;  // Véhicule n'existe plus
+        return;
+    }
+    
+    // Obtenir les voisins connectés
+    auto* interferenceGraph = m_engine->getInterferenceGraph();
+    int neighborCount = 0;
+    if (interferenceGraph) {
+        neighborCount = interferenceGraph->getNeighbors(m_selectedVehicleId).size();
+    }
+    
+    // Dessiner le panneau d'information en bas à droite
+    const int panelWidth = 250;
+    const int panelHeight = 160;
+    const int panelX = width() - panelWidth - 15;
+    const int panelY = height() - panelHeight - 15;
+    
+    // Fond semi-transparent
+    painter.setPen(QPen(QColor(50, 50, 50), 2));
+    painter.setBrush(QColor(0, 0, 0, 200));
+    painter.drawRoundedRect(panelX, panelY, panelWidth, panelHeight, 8, 8);
+    
+    // Titre
+    painter.setPen(Qt::white);
+    QFont titleFont("Arial", 12, QFont::Bold);
+    painter.setFont(titleFont);
+    painter.drawText(panelX + 10, panelY + 22, QString("🚗 Véhicule #%1").arg(m_selectedVehicleId));
+    
+    // Ligne de séparation
+    painter.setPen(QPen(QColor(100, 100, 100), 1));
+    painter.drawLine(panelX + 10, panelY + 30, panelX + panelWidth - 10, panelY + 30);
+    
+    // Informations
+    QFont infoFont("Arial", 10);
+    painter.setFont(infoFont);
+    painter.setPen(QColor(200, 200, 200));
+    
+    int textY = panelY + 48;
+    const int lineHeight = 20;
+    
+    // Position
+    painter.drawText(panelX + 15, textY, 
+        QString("📍 Position: %1°, %2°")
+            .arg(selectedVehicle->getLatitude(), 0, 'f', 5)
+            .arg(selectedVehicle->getLongitude(), 0, 'f', 5));
+    textY += lineHeight;
+    
+    // Vitesse (convertir m/s en km/h)
+    double speedKmh = selectedVehicle->getSpeed() * 3.6;
+    painter.drawText(panelX + 15, textY, 
+        QString("🚀 Vitesse: %1 km/h").arg(speedKmh, 0, 'f', 1));
+    textY += lineHeight;
+    
+    // Direction (convertir radians en degrés)
+    double directionDeg = selectedVehicle->getDirection() * 180.0 / M_PI;
+    QString directionName;
+    if (directionDeg >= -22.5 && directionDeg < 22.5) directionName = "Nord";
+    else if (directionDeg >= 22.5 && directionDeg < 67.5) directionName = "Nord-Est";
+    else if (directionDeg >= 67.5 && directionDeg < 112.5) directionName = "Est";
+    else if (directionDeg >= 112.5 && directionDeg < 157.5) directionName = "Sud-Est";
+    else if (directionDeg >= 157.5 || directionDeg < -157.5) directionName = "Sud";
+    else if (directionDeg >= -157.5 && directionDeg < -112.5) directionName = "Sud-Ouest";
+    else if (directionDeg >= -112.5 && directionDeg < -67.5) directionName = "Ouest";
+    else directionName = "Nord-Ouest";
+    
+    painter.drawText(panelX + 15, textY, 
+        QString("🧭 Direction: %1 (%2°)").arg(directionName).arg(directionDeg, 0, 'f', 0));
+    textY += lineHeight;
+    
+    // Rayon de transmission
+    painter.drawText(panelX + 15, textY, 
+        QString("📡 Rayon: %1 m").arg(selectedVehicle->getTransmissionRadius()));
+    textY += lineHeight;
+    
+    // Connexions V2V
+    painter.drawText(panelX + 15, textY, 
+        QString("🔗 Connexions: %1").arg(neighborCount));
+    
+    // Instructions en bas du panneau
+    painter.setPen(QColor(120, 120, 120));
+    QFont smallFont("Arial", 8);
+    painter.setFont(smallFont);
+    painter.drawText(panelX + 10, panelY + panelHeight - 8, 
+        "←→ changer | Esc désélectionner");
 }
 
 } // namespace visualization
